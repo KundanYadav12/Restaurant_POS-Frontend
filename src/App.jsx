@@ -1,0 +1,218 @@
+import React, { useState, useEffect } from 'react';
+import { ThemeProvider, createTheme, CssBaseline, Box, AppBar, Toolbar, Typography, Button, IconButton, useMediaQuery, Menu, MenuItem } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import LogOutIcon from '@mui/icons-material/Logout';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+
+import Login from './pages/Login';
+import POSScreen from './pages/POS';
+import CashierDashboard from './pages/CashierDashboard';
+import AdminPanel from './pages/AdminPanel';
+import SuperAdminPanel from './pages/SuperAdminPanel';
+import ChangePasswordModal from './components/ChangePasswordModal';
+import { NotificationProvider } from './context/NotificationContext';
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState('');
+  const [currentView, setCurrentView] = useState('pos'); // pos, cashier, admin, superadmin
+  const [themeMode, setThemeMode] = useState('light');
+  const [posFocusMode, setPosFocusMode] = useState(() => localStorage.getItem('pos_focus_mode') === 'true');
+
+  const [anchorElNav, setAnchorElNav] = useState(null);
+  const isMobile = useMediaQuery('(max-width:900px)');
+
+  useEffect(() => {
+    const savedToken = localStorage.getItem('pos_token');
+    const savedUser = localStorage.getItem('pos_user');
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      
+      if (parsedUser.role === 'super_admin') {
+        setCurrentView('superadmin');
+      } else {
+        setCurrentView('pos');
+      }
+    }
+  }, []);
+
+  const muiTheme = createTheme({
+    palette: {
+      mode: themeMode,
+      primary: {
+        main: '#f97316',
+        contrastText: '#ffffff'
+      },
+      secondary: {
+        main: '#10b981'
+      },
+      background: {
+        default: themeMode === 'light' ? '#f8fafc' : '#0f172a',
+        paper: themeMode === 'light' ? '#ffffff' : '#1e293b'
+      }
+    },
+    typography: {
+      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }
+  });
+
+  const toggleTheme = () => {
+    setThemeMode(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('pos_token');
+    localStorage.removeItem('pos_refresh_token');
+    localStorage.removeItem('pos_user');
+    setUser(null);
+    setToken('');
+  };
+
+  const handleFocusModeChange = (isFocus) => {
+    setPosFocusMode(isFocus);
+    localStorage.setItem('pos_focus_mode', isFocus ? 'true' : 'false');
+  };
+
+  if (!token || !user) {
+    return (
+      <NotificationProvider>
+        <ThemeProvider theme={muiTheme}>
+          <CssBaseline />
+          <Login onLoginSuccess={(u, t) => { setUser(u); setToken(t); }} />
+        </ThemeProvider>
+      </NotificationProvider>
+    );
+  }
+
+  const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'superadmin';
+  const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager';
+
+  return (
+    <NotificationProvider>
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+
+        <ChangePasswordModal
+          open={Boolean(user?.must_change_password)}
+          onPasswordChanged={(updatedUser) => setUser(updatedUser)}
+        />
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+          {/* Header Bar */}
+          {!posFocusMode && (
+            <AppBar position="static" color="default" elevation={1} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, xl: 80 }, px: { xs: 1.5, xl: 4 } }}>
+                
+                {/* Brand Title */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, xl: 2 } }}>
+                  <StorefrontIcon color="primary" sx={{ fontSize: { xs: 28, xl: 40 } }} />
+                  <Typography variant="h6" sx={{ fontWeight: 800, fontSize: { xs: '1.1rem', xl: '1.6rem' }, color: 'primary.main' }}>
+                    {user?.restaurant_name || 'Restaurant POS'}
+                  </Typography>
+                </Box>
+
+                {/* Navigation Menu */}
+                {isMobile ? (
+                  <>
+                    <IconButton onClick={(e) => setAnchorElNav(e.currentTarget)} color="inherit">
+                      <MenuIcon />
+                    </IconButton>
+                    <Menu
+                      anchorEl={anchorElNav}
+                      open={Boolean(anchorElNav)}
+                      onClose={() => setAnchorElNav(null)}
+                    >
+                      <MenuItem onClick={() => { setCurrentView('pos'); setAnchorElNav(null); }}>POS Screen</MenuItem>
+                      <MenuItem onClick={() => { setCurrentView('cashier'); setAnchorElNav(null); }}>Cashier Shift</MenuItem>
+                      {isAdminOrManager && (
+                        <MenuItem onClick={() => { setCurrentView('admin'); setAnchorElNav(null); }}>Admin Panel</MenuItem>
+                      )}
+                      {isSuperAdmin && (
+                        <MenuItem onClick={() => { setCurrentView('superadmin'); setAnchorElNav(null); }}>Super Admin</MenuItem>
+                      )}
+                    </Menu>
+                  </>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: { xs: 1, xl: 2.5 } }}>
+                    <Button
+                      variant={currentView === 'pos' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('pos')}
+                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                    >
+                      POS Screen
+                    </Button>
+                    <Button
+                      variant={currentView === 'cashier' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('cashier')}
+                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                    >
+                      Cashier Shift
+                    </Button>
+                    {isAdminOrManager && (
+                      <Button
+                        variant={currentView === 'admin' ? 'contained' : 'text'}
+                        onClick={() => setCurrentView('admin')}
+                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      >
+                        Admin Panel
+                      </Button>
+                    )}
+                    {isSuperAdmin && (
+                      <Button
+                        variant={currentView === 'superadmin' ? 'contained' : 'text'}
+                        onClick={() => setCurrentView('superadmin')}
+                        color="secondary"
+                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      >
+                        Super Admin
+                      </Button>
+                    )}
+                  </Box>
+                )}
+
+                {/* User Profile & Actions */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, xl: 3 } }}>
+                  <Box sx={{ display: { xs: 'none', md: 'block' }, textAlign: 'right' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, fontSize: { xs: '0.875rem', xl: '1.2rem' } }}>{user?.name || 'User'}</Typography>
+                    <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: { xs: '0.75rem', xl: '1rem' } }}>
+                      {user?.role || 'Staff'}
+                    </Typography>
+                  </Box>
+
+                  <IconButton onClick={toggleTheme} color="inherit">
+                    {themeMode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
+                  </IconButton>
+
+                  <IconButton onClick={handleLogout} color="error" title="End Session">
+                    <LogOutIcon />
+                  </IconButton>
+                </Box>
+
+              </Toolbar>
+            </AppBar>
+          )}
+
+          {/* View Content */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {currentView === 'pos' && (
+              <POSScreen
+                user={user}
+                token={token}
+                onLogout={handleLogout}
+                isFocusMode={posFocusMode}
+                onFocusModeChange={handleFocusModeChange}
+              />
+            )}
+            {currentView === 'cashier' && <CashierDashboard user={user} token={token} onLogout={handleLogout} />}
+            {currentView === 'admin' && <AdminPanel token={token} />}
+            {currentView === 'superadmin' && <SuperAdminPanel token={token} />}
+          </Box>
+        </Box>
+      </ThemeProvider>
+    </NotificationProvider>
+  );
+}
