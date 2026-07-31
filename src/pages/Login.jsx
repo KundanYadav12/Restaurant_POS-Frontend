@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Utensils, Eye, EyeOff } from 'lucide-react';
 import OTPVerification from './OTPVerification';
+import { getApiUrl } from '../utils/api';
 
 export default function Login({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -26,7 +27,7 @@ export default function Login({ onLoginSuccess }) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

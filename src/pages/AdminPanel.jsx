@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel } from '@mui/material';
 import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown } from 'lucide-react';
-import { apiFetch } from '../utils/api';
+import { apiFetch, getApiUrl } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 
 export default function AdminPanel({ token }) {
@@ -558,7 +558,7 @@ export default function AdminPanel({ token }) {
     }
 
     try {
-      const url = dialogType === 'add_menu' ? '/api/menu' : `/api/menu/${selectedEntity.id}`;
+      const url = getApiUrl(dialogType === 'add_menu' ? '/api/menu' : `/api/menu/${selectedEntity.id}`);
       const method = dialogType === 'add_menu' ? 'POST' : 'PUT';
       const response = await fetch(url, {
         method,
@@ -586,7 +586,7 @@ export default function AdminPanel({ token }) {
     if (!isConfirmed) return;
 
     try {
-      await fetch(`/api/menu/${id}`, {
+      await fetch(getApiUrl(`/api/menu/${id}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -800,7 +800,7 @@ export default function AdminPanel({ token }) {
   const handleSaveCategory = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/categories', {
+      const response = await fetch(getApiUrl('/api/categories'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ name: categoryName, description: categoryDesc })
@@ -825,7 +825,7 @@ export default function AdminPanel({ token }) {
     if (!isConfirmed) return;
 
     try {
-      await fetch(`/api/categories/${id}`, {
+      await fetch(getApiUrl(`/api/categories/${id}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

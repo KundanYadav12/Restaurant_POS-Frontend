@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, Key, Mail, CheckCircle2, Lock, ArrowRight, RefreshCw, Eye, EyeOff, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
 import { Button, Box, Typography, Alert, CircularProgress } from '@mui/material';
+import { getApiUrl } from '../utils/api';
 
 export default function OTPVerification({ initialEmail = '', onVerificationSuccess, onBackToLogin }) {
   const [email, setEmail] = useState(initialEmail);
@@ -72,7 +73,7 @@ export default function OTPVerification({ initialEmail = '', onVerificationSucce
 
     try {
       console.log(`[OTP Verification UI] Requesting OTP code for: "${cleanEmail}"`);
-      const res = await fetch('/api/auth/send-otp', {
+      const res = await fetch(getApiUrl('/api/auth/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail })
@@ -145,7 +146,7 @@ export default function OTPVerification({ initialEmail = '', onVerificationSucce
     setError('');
 
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const res = await fetch(getApiUrl('/api/auth/verify-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp_code: otpCode })
@@ -184,7 +185,7 @@ export default function OTPVerification({ initialEmail = '', onVerificationSucce
     setError('');
 
     try {
-      const res = await fetch('/api/auth/activate-password', {
+      const res = await fetch(getApiUrl('/api/auth/activate-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp_code: getFullOTP(), password: newPassword })

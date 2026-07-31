@@ -1,7 +1,29 @@
 /**
  * Centralized API fetch wrapper with automatic JWT token refresh.
- * Guarantees persistent session operation without blank menu screens or unexpected logouts.
+ * Uses import.meta.env.VITE_API_URL for production and development environment compatibility.
  */
+
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+
+export function getApiUrl(endpoint) {
+  if (!endpoint) return API_BASE_URL;
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+  
+  let cleanEndpoint = endpoint;
+  if (cleanEndpoint.startsWith('/api/')) {
+    cleanEndpoint = cleanEndpoint.substring(4);
+  } else if (cleanEndpoint === '/api') {
+    cleanEndpoint = '';
+  }
+  
+  if (!cleanEndpoint.startsWith('/') && cleanEndpoint !== '') {
+    cleanEndpoint = '/' + cleanEndpoint;
+  }
+  
+  return `${API_BASE_URL}${cleanEndpoint}`;
+}
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -18,6 +40,7 @@ const processQueue = (error, token = null) => {
 };
 
 export async function apiFetch(url, options = {}) {
+  const fullUrl = getApiUrl(url);
   const headers = options.headers || {};
   let token = localStorage.getItem('pos_token');
 
@@ -35,7 +58,7 @@ export async function apiFetch(url, options = {}) {
     headers
   };
 
-  let response = await fetch(url, fetchOptions);
+  let response = await fetch(fullUrl, fetchOptions);
 
   // Handle 401 Unauthorized (Expired Access Token)
   if (response.status === 401) {
@@ -52,7 +75,7 @@ export async function apiFetch(url, options = {}) {
       })
         .then(newToken => {
           fetchOptions.headers['Authorization'] = `Bearer ${newToken}`;
-          return fetch(url, fetchOptions);
+          return fetch(fullUrl, fetchOptions);
         })
         .catch(err => {
           return Promise.reject(err);
@@ -62,7 +85,7 @@ export async function apiFetch(url, options = {}) {
     isRefreshing = true;
 
     try {
-      const refreshRes = await fetch('/api/auth/refresh', {
+      const refreshRes = await fetch(getApiUrl('/api/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: refreshToken })
@@ -80,7 +103,7 @@ export async function apiFetch(url, options = {}) {
         isRefreshing = false;
 
         // Transparently retry the original request with new token
-        response = await fetch(url, fetchOptions);
+        response = await fetch(fullUrl, fetchOptions);
       } else {
         // Refresh token expired or revoked - clear storage
         processQueue(new Error('Refresh token expired'), null);
