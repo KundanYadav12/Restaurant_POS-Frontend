@@ -4410,7 +4410,7 @@ export default function AdminPanel({ token }) {
         onClose={() => setHistoryOrderDetailOpen(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: '16px', p: 1 } }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', p: 1 } } }}
       >
         <DialogTitle sx={{ fontWeight: 800 }}>
           Order details: {selectedHistoryOrder?.order?.unique_order_number}

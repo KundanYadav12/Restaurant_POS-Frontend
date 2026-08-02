@@ -341,56 +341,67 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
   const totals = calculateTotals();
 
-  // Click 2: Place Order -> Trigger Stage 1 confirmation
-  const handlePlaceOrderClick = () => {
+  // Click 2: Place Order -> Check Stage 1 vs Stage 2 Workflow
+  const handlePlaceOrderClick = async () => {
     if (cart.length === 0) return;
     
-    const stage1Mode = receiptSettings?.print_stage1_mode || 'save_only';
-    if (stage1Mode === 'show_popup') {
-      setShowStage1Dialog(true);
+    // Fetch latest settings to guarantee instant toggle response without caching issues
+    let currentSettings = receiptSettings;
+    try {
+      const settingsRes = await apiFetch('/api/settings/receipt');
+      if (settingsRes.ok) {
+        currentSettings = await settingsRes.json();
+        setReceiptSettings(currentSettings);
+      }
+    } catch (e) {
+      console.error('Failed to refresh settings before checkout:', e);
+    }
+
+    const enableStage2 = Number(currentSettings?.enable_stage2_popup ?? 1) !== 0;
+
+    if (enableStage2) {
+      // Stage 2 is ON: Stage 1 is COMPLETELY BYPASSED! No order is saved or printed yet.
+      setShowStage1Dialog(false);
+      setShowStage2PaymentDialog(true);
     } else {
-      executeStage1Checkout(stage1Mode);
+      // Stage 2 is OFF: Stage 2 payment popup NEVER appears. Execute Stage 1 action directly.
+      setShowStage2PaymentDialog(false);
+      setShowStage2PrintDialog(false);
+      const stage1Mode = currentSettings?.print_stage1_mode || 'save_only';
+      if (stage1Mode === 'show_popup') {
+        setShowStage1Dialog(true);
+      } else {
+        executeStage1Checkout(stage1Mode, currentSettings);
+      }
     }
   };
 
-  // Click 3: Confirm Checkout Payment Mode / Hold Order (Handles show_popup printing logic)
-  const executeStage1Checkout = async (action) => {
+  // Stage 1 Checkout Execution (Used ONLY when Stage 2 is OFF)
+  const executeStage1Checkout = async (action, currentSettings = receiptSettings) => {
     setLoading(true);
     setError('');
-
-    const enableStage2 = receiptSettings?.enable_stage2_popup !== 0;
 
     let status = 'pending';
     let paymentMode = 'pending';
     let printActions = [];
 
-    if (enableStage2) {
+    if (action === 'print_receipt_only') {
+      status = 'completed';
+      paymentMode = 'cash';
+      printActions = ['RECEIPT'];
+    } else if (action === 'print_kot_receipt') {
+      status = 'completed';
+      paymentMode = 'cash';
+      printActions = ['KOT', 'RECEIPT'];
+    } else if (action === 'print_kot_only') {
       status = 'pending';
       paymentMode = 'pending';
-      if (action === 'print_kot_only' || action === 'print_kot_receipt') {
-        printActions.push('KOT');
-      }
-      if (action === 'print_receipt_only' || action === 'print_kot_receipt') {
-        printActions.push('RECEIPT');
-      }
+      printActions = ['KOT'];
     } else {
-      if (action === 'print_receipt_only') {
-        status = 'completed';
-        paymentMode = 'cash';
-        printActions = ['RECEIPT'];
-      } else if (action === 'print_kot_receipt') {
-        status = 'completed';
-        paymentMode = 'cash';
-        printActions = ['KOT', 'RECEIPT'];
-      } else if (action === 'print_kot_only') {
-        status = 'pending';
-        paymentMode = 'pending';
-        printActions = ['KOT'];
-      } else {
-        status = 'pending';
-        paymentMode = 'pending';
-        printActions = [];
-      }
+      // save_only
+      status = 'pending';
+      paymentMode = 'pending';
+      printActions = [];
     }
 
     try {
@@ -424,28 +435,23 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       setLastOrderDetails(data);
       setShowStage1Dialog(false);
 
-      if (enableStage2) {
-        setCreatedOrderId(data.orderId);
-        setShowStage2PaymentDialog(true);
-      } else {
-        setCart([]);
-        setDiscountValue(0);
-        setOrderNotes('');
-        setCustomerName('');
-        setCustomerPhone('');
-        setMobileTab(0);
-        
-        notify.success(
-          status === 'completed' 
-            ? 'Order completed and billed successfully.' 
-            : 'Order held/sent to kitchen successfully.', 
-          'Success',
-          1000
-        );
-        
-        if (receiptSettings?.enable_whatsapp_receipt && customerPhone) {
-          triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
-        }
+      setCart([]);
+      setDiscountValue(0);
+      setOrderNotes('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setMobileTab(0);
+      
+      notify.success(
+        status === 'completed' 
+          ? 'Order completed and billed successfully.' 
+          : 'Order held/sent to kitchen successfully.', 
+        'Success',
+        1000
+      );
+      
+      if (currentSettings?.enable_whatsapp_receipt && customerPhone) {
+        triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
       }
     } catch (err) {
       notify.error(err.message || 'Checkout failed.', 'Checkout Error');
@@ -454,20 +460,23 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
     }
   };
 
+  // Stage 2 Payment Method Selected (Used ONLY when Stage 2 is ON)
   const handleStage2PaymentSelect = (mode) => {
     setStage2SelectedPaymentMode(mode);
+    setShowStage2PaymentDialog(false);
     
     const stage2Mode = receiptSettings?.print_stage2_mode || 'print_receipt_only';
     if (stage2Mode === 'show_popup') {
       setShowStage2PrintDialog(true);
     } else {
-      executeStage2Complete(mode, stage2Mode);
+      executeStage2CheckoutComplete(mode, stage2Mode);
     }
   };
 
-  const executeStage2Complete = async (mode, action) => {
-    if (!createdOrderId) return;
+  // Stage 2 Checkout Execution (Creates and completes order in single atomic step with selected payment mode & Stage 2 print actions)
+  const executeStage2CheckoutComplete = async (mode, action) => {
     setLoading(true);
+    setError('');
     
     let printActions = [];
     if (action === 'print_receipt_only') {
@@ -477,28 +486,46 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
     } else if (action === 'print_kot_only') {
       printActions = ['KOT'];
     } else {
+      // save_only
       printActions = [];
     }
 
     try {
-      const res = await apiFetch(`/api/orders/${createdOrderId}/status`, {
-        method: 'PUT',
-        body: {
-          status: 'completed',
-          payment_mode: mode,
-          print_actions: printActions
-        }
+      const orderPayload = {
+        items: cart,
+        payment_mode: mode,
+        subtotal: totals.subtotal,
+        tax_amount: totals.tax_amount,
+        discount_amount: totals.discount_amount,
+        total_amount: totals.total_amount,
+        table_number_or_takeaway: tableOrTakeaway,
+        notes: orderNotes,
+        status: 'completed',
+        discount_type: discountType,
+        discount_value: discountValue,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        print_actions: printActions
+      };
+
+      const response = await apiFetch('/api/orders', {
+        method: 'POST',
+        body: orderPayload
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to finalize payment.');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Payment processing failed.');
       }
+
+      setLastOrderDetails(data);
+      setShowStage2PrintDialog(false);
+      setShowStage2PaymentDialog(false);
 
       notify.success('Payment collected and order completed!', 'Success', 1000);
       
       if (receiptSettings?.enable_whatsapp_receipt && customerPhone) {
-        triggerWhatsAppShare(lastOrderDetails?.orderNumber || 'ORDER', totals.total_amount, customerPhone);
+        triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
       }
 
       setCart([]);
@@ -507,8 +534,6 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       setCustomerName('');
       setCustomerPhone('');
       setCreatedOrderId(null);
-      setShowStage2PaymentDialog(false);
-      setShowStage2PrintDialog(false);
       setMobileTab(0);
     } catch (err) {
       notify.error(err.message || 'Payment collection failed.', 'Error');
@@ -1401,8 +1426,8 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         onClose={() => setShowStage1Dialog(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: '16px', p: 1 }
+        slotProps={{
+          paper: { sx: { borderRadius: '16px', p: 1 } }
         }}
       >
         <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
@@ -1452,20 +1477,11 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       {/* STAGE 2 PAYMENT METHOD POPUP */}
       <Dialog
         open={showStage2PaymentDialog}
-        onClose={() => {
-          setCart([]);
-          setDiscountValue(0);
-          setOrderNotes('');
-          setCustomerName('');
-          setCustomerPhone('');
-          setCreatedOrderId(null);
-          setShowStage2PaymentDialog(false);
-          setMobileTab(0);
-        }}
+        onClose={() => setShowStage2PaymentDialog(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: '16px', p: 1 }
+        slotProps={{
+          paper: { sx: { borderRadius: '16px', p: 1 } }
         }}
       >
         <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
@@ -1477,11 +1493,6 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
             <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main', mt: 0.5 }}>
               Rs. {totals.total_amount.toFixed(2)}
             </Typography>
-            {lastOrderDetails && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                Order Number: <b>{lastOrderDetails.orderNumber}</b>
-              </Typography>
-            )}
           </Box>
 
           <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 1 }}>
@@ -1547,16 +1558,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         </DialogContent>
         <DialogActions>
           <Button
-            onClick={() => {
-              setCart([]);
-              setDiscountValue(0);
-              setOrderNotes('');
-              setCustomerName('');
-              setCustomerPhone('');
-              setCreatedOrderId(null);
-              setShowStage2PaymentDialog(false);
-              setMobileTab(0);
-            }}
+            onClick={() => setShowStage2PaymentDialog(false)}
             color="inherit"
             sx={{ fontWeight: 'bold' }}
           >
@@ -1571,8 +1573,8 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         onClose={() => setShowStage2PrintDialog(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: '16px', p: 1 }
+        slotProps={{
+          paper: { sx: { borderRadius: '16px', p: 1 } }
         }}
       >
         <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
@@ -1595,7 +1597,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
                 fullWidth
                 size="large"
                 disabled={loading}
-                onClick={() => executeStage2Complete(stage2SelectedPaymentMode, opt.action)}
+                onClick={() => executeStage2CheckoutComplete(stage2SelectedPaymentMode, opt.action)}
                 sx={{
                   fontWeight: 800,
                   py: 1.5,

@@ -363,12 +363,14 @@ export default function CashierDashboard({ user, token, onLogout }) {
                 placeholder="Search history by Order #, customer name, mobile..."
                 value={historySearch}
                 onChange={e => { setHistorySearch(e.target.value); setHistoryPage(0); }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon style={{ color: '#64748b', fontSize: 18 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon style={{ color: '#64748b', fontSize: 18 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
@@ -559,7 +561,7 @@ export default function CashierDashboard({ user, token, onLogout }) {
                 label="Payment Mode"
                 value={paymentMode}
                 onChange={e => setPaymentMode(e.target.value)}
-                SelectProps={{ native: true }}
+                slotProps={{ select: { native: true } }}
               >
                 <option value="cash">💵 Cash Payment</option>
                 <option value="upi">📱 UPI QR Scan</option>
@@ -584,8 +586,8 @@ export default function CashierDashboard({ user, token, onLogout }) {
         onClose={() => setShowStage2Dialog(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: '16px', p: 1 }
+        slotProps={{
+          paper: { sx: { borderRadius: '16px', p: 1 } }
         }}
       >
         <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
