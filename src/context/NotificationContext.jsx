@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { CheckCircle2, AlertCircle, AlertTriangle, Info, X, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X, ShieldAlert, ThumbsUp } from 'lucide-react';
 import { Box, Typography, Button, IconButton, Paper, Portal, useMediaQuery } from '@mui/material';
 
 const NotificationContext = createContext(null);
@@ -18,19 +18,20 @@ export function NotificationProvider({ children }) {
   const isMobile = useMediaQuery('(max-width:600px)');
 
   // Helper to add toast
-  const addToast = (type, message, title = '') => {
+  const addToast = (type, message, title = '', duration = undefined) => {
     const id = Date.now() + Math.random().toString(36).substring(2, 9);
+    const resolvedDuration = duration !== undefined ? duration : (type === 'success' ? 2000 : 4500);
     setToasts(prev => [
-      { id, type, message, title, createdAt: Date.now(), duration: 4500 },
+      { id, type, message, title, createdAt: Date.now(), duration: resolvedDuration },
       ...prev
     ]);
   };
 
   const notify = {
-    success: (message, title) => addToast('success', message, title),
-    error: (message, title) => addToast('error', message, title),
-    warning: (message, title) => addToast('warning', message, title),
-    info: (message, title) => addToast('info', message, title)
+    success: (message, title, duration) => addToast('success', message, title, duration),
+    error: (message, title, duration) => addToast('error', message, title, duration),
+    warning: (message, title, duration) => addToast('warning', message, title, duration),
+    info: (message, title, duration) => addToast('info', message, title, duration)
   };
 
   const removeToast = (id) => {
@@ -83,7 +84,7 @@ export function NotificationProvider({ children }) {
             right: isMobile ? '50%' : '1.5rem',
             transform: isMobile ? 'translateX(50%)' : 'none',
             width: isMobile ? 'calc(100% - 2rem)' : 'auto',
-            maxWidth: 400,
+            maxWidth: 'min(400px, calc(100vw - 2rem))',
             zIndex: 9999,
             display: 'flex',
             flexDirection: 'column',
@@ -193,7 +194,7 @@ function ToastItem({ toast, onClose }) {
           borderColor: '#22c55e',
           iconBg: '#dcfce7',
           iconColor: '#16a34a',
-          IconComponent: CheckCircle2,
+          IconComponent: ThumbsUp,
           defaultTitle: 'Success'
         };
       case 'error':
@@ -254,7 +255,7 @@ function ToastItem({ toast, onClose }) {
         pointerEvents: 'auto',
         position: 'relative',
         overflow: 'hidden',
-        minWidth: 300,
+        minWidth: 'min(300px, calc(100vw - 3rem))',
         bgcolor: '#ffffff',
         borderRadius: '14px',
         borderLeft: `5px solid ${styles.borderColor}`,

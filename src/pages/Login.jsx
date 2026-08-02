@@ -84,7 +84,7 @@ export default function Login({ onLoginSuccess }) {
       <div style={{
         width: '100%',
         maxWidth: '420px',
-        padding: '32px',
+        padding: 'clamp(20px, 5vw, 32px)',
         borderRadius: '16px',
         backgroundColor: '#ffffff',
         boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
@@ -139,6 +139,7 @@ export default function Login({ onLoginSuccess }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. user@restaurant.com"
+              autoComplete="email"
               required
               style={{
                 width: '100%',
@@ -182,6 +183,7 @@ export default function Login({ onLoginSuccess }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
+                autoComplete="current-password"
                 required
                 style={{
                   width: '100%',

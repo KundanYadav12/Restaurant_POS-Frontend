@@ -13,6 +13,7 @@ import AdminPanel from './pages/AdminPanel';
 import SuperAdminPanel from './pages/SuperAdminPanel';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { NotificationProvider } from './context/NotificationContext';
+import { apiFetch } from './utils/api';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -25,19 +26,58 @@ export default function App() {
   const isMobile = useMediaQuery('(max-width:900px)');
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('pos_token');
-    const savedUser = localStorage.getItem('pos_user');
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      
-      if (parsedUser.role === 'super_admin') {
-        setCurrentView('superadmin');
+    const syncAuthFromStorage = () => {
+      const savedToken = localStorage.getItem('pos_token');
+      const savedUser = localStorage.getItem('pos_user');
+      if (savedToken && savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setToken(savedToken);
+          setUser(parsedUser);
+          
+          if (parsedUser.role === 'super_admin' || parsedUser.role === 'superadmin') {
+            setCurrentView('superadmin');
+          }
+        } catch (e) {
+          handleLogout();
+        }
       } else {
-        setCurrentView('pos');
+        setToken('');
+        setUser(null);
       }
-    }
+    };
+
+    syncAuthFromStorage();
+
+    const handleSessionExpired = () => {
+      setToken('');
+      setUser(null);
+    };
+
+    const handleTokenRefreshed = (e) => {
+      if (e.detail?.token) {
+        setToken(e.detail.token);
+      }
+      if (e.detail?.user) {
+        setUser(e.detail.user);
+      }
+    };
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'pos_token' || e.key === 'pos_user' || e.key === 'pos_refresh_token') {
+        syncAuthFromStorage();
+      }
+    };
+
+    window.addEventListener('auth_session_expired', handleSessionExpired);
+    window.addEventListener('auth_token_refreshed', handleTokenRefreshed);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('auth_session_expired', handleSessionExpired);
+      window.removeEventListener('auth_token_refreshed', handleTokenRefreshed);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const muiTheme = createTheme({
@@ -64,12 +104,18 @@ export default function App() {
     setThemeMode(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('pos_token');
-    localStorage.removeItem('pos_refresh_token');
-    localStorage.removeItem('pos_user');
-    setUser(null);
-    setToken('');
+  const handleLogout = async () => {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn('Logout warning:', e);
+    } finally {
+      localStorage.removeItem('pos_token');
+      localStorage.removeItem('pos_refresh_token');
+      localStorage.removeItem('pos_user');
+      setUser(null);
+      setToken('');
+    }
   };
 
   const handleFocusModeChange = (isFocus) => {
@@ -197,7 +243,7 @@ export default function App() {
           )}
 
           {/* View Content */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
             {currentView === 'pos' && (
               <POSScreen
                 user={user}
@@ -207,9 +253,21 @@ export default function App() {
                 onFocusModeChange={handleFocusModeChange}
               />
             )}
-            {currentView === 'cashier' && <CashierDashboard user={user} token={token} onLogout={handleLogout} />}
-            {currentView === 'admin' && <AdminPanel token={token} />}
-            {currentView === 'superadmin' && <SuperAdminPanel token={token} />}
+            {currentView === 'cashier' && (
+              <Box sx={{ flex: 1, height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <CashierDashboard user={user} token={token} onLogout={handleLogout} />
+              </Box>
+            )}
+            {currentView === 'admin' && (
+              <Box sx={{ flex: 1, height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <AdminPanel token={token} />
+              </Box>
+            )}
+            {currentView === 'superadmin' && (
+              <Box sx={{ flex: 1, height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <SuperAdminPanel token={token} />
+              </Box>
+            )}
           </Box>
         </Box>
       </ThemeProvider>

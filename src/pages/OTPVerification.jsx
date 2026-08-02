@@ -236,7 +236,7 @@ export default function OTPVerification({ initialEmail = '', onVerificationSucce
       <div style={{
         width: '100%',
         maxWidth: '460px',
-        padding: '36px',
+        padding: 'clamp(20px, 5vw, 36px)',
         borderRadius: '20px',
         backgroundColor: '#ffffff',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel } from '@mui/material';
-import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown } from 'lucide-react';
-import { apiFetch, getApiUrl } from '../utils/api';
+import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel, Divider } from '@mui/material';
+import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown, Boxes, Package, AlertTriangle, TrendingUp, History, FileSpreadsheet } from 'lucide-react';
+import { apiFetch, getApiUrl, downloadFile } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
+import DateRangePicker from '../components/DateRangePicker';
 
 export default function AdminPanel({ token }) {
   const { notify, confirmDialog } = useNotify();
@@ -15,6 +16,17 @@ export default function AdminPanel({ token }) {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isScrolled, setIsScrolled] = useState(false);
+  const scrollRef = React.useRef(null);
+
+  const handleScroll = (e) => {
+    const scrollTop = e.target.scrollTop;
+    if (scrollTop > 10 && !isScrolled) {
+      setIsScrolled(true);
+    } else if (scrollTop <= 10 && isScrolled) {
+      setIsScrolled(false);
+    }
+  };
 
   // Staff User Dialog States
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
@@ -25,6 +37,44 @@ export default function AdminPanel({ token }) {
   const [staffPassword, setStaffPassword] = useState('');
   const [staffRole, setStaffRole] = useState('cashier');
   const [staffActive, setStaffActive] = useState(true);
+
+  // --- Item Sales Report (Tab 4) States ---
+  const [itemReportData, setItemReportData] = useState([]);
+  const [itemReportPreset, setItemReportPreset] = useState('30days');
+  const [itemReportCategory, setItemReportCategory] = useState('all');
+  const [itemReportSearch, setItemReportSearch] = useState('');
+  const [itemReportSortBy, setItemReportSortBy] = useState('qtySold');
+  const [itemReportSortOrder, setItemReportSortOrder] = useState('DESC');
+  const [itemReportDateFrom, setItemReportDateFrom] = useState('');
+  const [itemReportDateTo, setItemReportDateTo] = useState('');
+
+  // Item Sales History Drawer/Modal
+  const [selectedReportItem, setSelectedReportItem] = useState(null);
+  const [itemHistoryModalOpen, setItemHistoryModalOpen] = useState(false);
+  const [itemHistoryData, setItemHistoryData] = useState([]);
+  const [loadingItemHistory, setLoadingItemHistory] = useState(false);
+
+  // --- Stock & Inventory Report (Tab 5) States ---
+  const [stockReportData, setStockReportData] = useState({ items: [], summary: { total_items: 0, in_stock_count: 0, low_stock_count: 0, out_of_stock_count: 0 } });
+  const [stockCategoryFilter, setStockCategoryFilter] = useState('all');
+  const [stockStatusFilter, setStockStatusFilter] = useState('all');
+  const [stockSearch, setStockSearch] = useState('');
+
+  // Quick Stock Adjustment Dialog
+  const [adjustStockModalOpen, setAdjustStockModalOpen] = useState(false);
+  const [selectedStockItem, setSelectedStockItem] = useState(null);
+  const [adjustmentType, setAdjustmentType] = useState('add');
+  const [adjustQuantity, setAdjustQuantity] = useState('10');
+  const [adjustUnit, setAdjustUnit] = useState('pcs');
+  const [adjustThreshold, setAdjustThreshold] = useState('10');
+  const [adjustReason, setAdjustReason] = useState('Stock Replenishment');
+  const [savingStockAdjust, setSavingStockAdjust] = useState(false);
+
+  // Stock Audit Log Modal
+  const [stockLogsModalOpen, setStockLogsModalOpen] = useState(false);
+  const [selectedStockLogItem, setSelectedStockLogItem] = useState(null);
+  const [stockLogsData, setStockLogsData] = useState([]);
+  const [loadingStockLogs, setLoadingStockLogs] = useState(false);
 
   // Dialog configurations
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -97,6 +147,159 @@ export default function AdminPanel({ token }) {
   const [receiptPreviewMode, setReceiptPreviewMode] = useState('receipt'); // 'receipt' or 'kot'
   const [savingReceiptSettings, setSavingReceiptSettings] = useState(false);
   const [testingPrint, setTestingPrint] = useState(false);
+
+  const [workflowDraft, setWorkflowDraft] = useState({
+    print_stage1_mode: 'print_kot_receipt',
+    print_stage2_mode: 'print_receipt_only',
+    enable_stage2_popup: 1,
+    stage1_popup_save_only: 1,
+    stage1_popup_receipt_only: 1,
+    stage1_popup_kot_only: 1,
+    stage1_popup_kot_receipt: 1,
+    stage2_popup_save_only: 1,
+    stage2_popup_receipt_only: 1,
+    stage2_popup_kot_only: 1,
+    stage2_popup_kot_receipt: 1
+  });
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
+
+  // Cashier Permissions & WhatsApp Share Draft state
+  const [permissionsDraft, setPermissionsDraft] = useState({
+    allow_cashier_view_all_reports: 0,
+    enable_whatsapp_receipt: 0,
+    whatsapp_business_phone: ''
+  });
+  const [savingPermissions, setSavingPermissions] = useState(false);
+
+  const parseNumFlag = (val, defaultVal = 1) => {
+    if (val === undefined || val === null) return defaultVal;
+    if (val === true || val === 1 || val === '1' || val === 'true') return 1;
+    if (val === false || val === 0 || val === '0' || val === 'false') return 0;
+    return defaultVal;
+  };
+
+  // Helper: build workflowDraft from settings object (normalises mysql2 boolean coercion)
+  const buildWorkflowDraft = (s) => {
+    if (!s) return workflowDraft;
+    return {
+      print_stage1_mode:         s.print_stage1_mode         || 'print_kot_receipt',
+      print_stage2_mode:         s.print_stage2_mode         || 'print_receipt_only',
+      enable_stage2_popup:       parseNumFlag(s.enable_stage2_popup, 1),
+      stage1_popup_save_only:    parseNumFlag(s.stage1_popup_save_only, 1),
+      stage1_popup_receipt_only: parseNumFlag(s.stage1_popup_receipt_only, 1),
+      stage1_popup_kot_only:     parseNumFlag(s.stage1_popup_kot_only, 1),
+      stage1_popup_kot_receipt:  parseNumFlag(s.stage1_popup_kot_receipt, 1),
+      stage2_popup_save_only:    parseNumFlag(s.stage2_popup_save_only, 1),
+      stage2_popup_receipt_only: parseNumFlag(s.stage2_popup_receipt_only, 1),
+      stage2_popup_kot_only:     parseNumFlag(s.stage2_popup_kot_only, 1),
+      stage2_popup_kot_receipt:  parseNumFlag(s.stage2_popup_kot_receipt, 1)
+    };
+  };
+
+  // Helper: build permissionsDraft from settings object
+  const buildPermissionsDraft = (s) => {
+    if (!s) return permissionsDraft;
+    return {
+      allow_cashier_view_all_reports: parseNumFlag(s.allow_cashier_view_all_reports, 0),
+      enable_whatsapp_receipt:        parseNumFlag(s.enable_whatsapp_receipt, 0),
+      whatsapp_business_phone:        s.whatsapp_business_phone || ''
+    };
+  };
+
+  const handleSaveWorkflowSettings = async () => {
+    setSavingWorkflow(true);
+    try {
+      const payload = {
+        ...receiptSettings,
+        print_stage1_mode:         workflowDraft.print_stage1_mode,
+        print_stage2_mode:         workflowDraft.print_stage2_mode,
+        enable_stage2_popup:       workflowDraft.enable_stage2_popup,
+        stage1_popup_save_only:    workflowDraft.stage1_popup_save_only,
+        stage1_popup_receipt_only: workflowDraft.stage1_popup_receipt_only,
+        stage1_popup_kot_only:     workflowDraft.stage1_popup_kot_only,
+        stage1_popup_kot_receipt:  workflowDraft.stage1_popup_kot_receipt,
+        stage2_popup_save_only:    workflowDraft.stage2_popup_save_only,
+        stage2_popup_receipt_only: workflowDraft.stage2_popup_receipt_only,
+        stage2_popup_kot_only:     workflowDraft.stage2_popup_kot_only,
+        stage2_popup_kot_receipt:  workflowDraft.stage2_popup_kot_receipt
+      };
+
+      const res = await apiFetch('/api/settings/receipt', {
+        method: 'POST',
+        body: payload
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.settings || data;
+        setReceiptSettings(prev => ({ ...prev, ...updated }));
+        setWorkflowDraft(buildWorkflowDraft(updated));
+        setPermissionsDraft(buildPermissionsDraft(updated));
+        notify.success('Print stage workflow settings saved successfully.', 'Settings Saved', 1000);
+      } else {
+        const errData = await res.json();
+        notify.error(errData.error || 'Failed to save workflow settings.', 'Save Error');
+      }
+    } catch (err) {
+      console.error(err);
+      notify.error('Network error saving workflow settings.', 'Save Error');
+    } finally {
+      setSavingWorkflow(false);
+    }
+  };
+
+  const handleSavePermissionsSettings = async () => {
+    setSavingPermissions(true);
+    try {
+      const payload = {
+        ...receiptSettings,
+        allow_cashier_view_all_reports: permissionsDraft.allow_cashier_view_all_reports,
+        enable_whatsapp_receipt:        permissionsDraft.enable_whatsapp_receipt,
+        whatsapp_business_phone:        permissionsDraft.whatsapp_business_phone
+      };
+
+      const res = await apiFetch('/api/settings/receipt', {
+        method: 'POST',
+        body: payload
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.settings || data;
+        setReceiptSettings(prev => ({ ...prev, ...updated }));
+        setPermissionsDraft(buildPermissionsDraft(updated));
+        notify.success('👍 Settings saved successfully.', 'Settings Saved', 1500);
+      } else {
+        const errData = await res.json();
+        notify.error(errData.error || 'Failed to save settings.', 'Save Error');
+      }
+    } catch (err) {
+      console.error(err);
+      notify.error('Network error saving permissions settings.', 'Save Error');
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
+  // Sales Reports presets & customs
+  const [reportPreset, setReportPreset] = useState('30days');
+  const [reportDateFrom, setReportDateFrom] = useState('');
+  const [reportDateTo, setReportDateTo] = useState('');
+
+  // Order history sub-tab states
+  const [historyOrders, setHistoryOrders] = useState([]);
+  const [historyPreset, setHistoryPreset] = useState('all');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyCashier, setHistoryCashier] = useState('all');
+  const [historyPaymentMode, setHistoryPaymentMode] = useState('all');
+  const [historyStatus, setHistoryStatus] = useState('all');
+  const [historyDateFrom, setHistoryDateFrom] = useState('');
+  const [historyDateTo, setHistoryDateTo] = useState('');
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyLimit, setHistoryLimit] = useState(20);
+  
+  const [selectedHistoryOrder, setSelectedHistoryOrder] = useState(null);
+  const [historyOrderDetailOpen, setHistoryOrderDetailOpen] = useState(false);
 
   const isMobileOrTablet = useMediaQuery('(max-width:900px)');
   const isMobile = isMobileOrTablet;
@@ -269,7 +472,7 @@ export default function AdminPanel({ token }) {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, reportPreset, reportDateFrom, reportDateTo, historySearch, historyCashier, historyPaymentMode, historyStatus, historyDateFrom, historyDateTo, historyPage, historyLimit, itemReportPreset, itemReportDateFrom, itemReportDateTo, itemReportCategory, itemReportSearch, itemReportSortBy, itemReportSortOrder, stockCategoryFilter, stockStatusFilter, stockSearch]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -318,7 +521,38 @@ export default function AdminPanel({ token }) {
           setPrinters([]);
         }
       } else if (activeTab === 3) {
-        const repRes = await apiFetch('/api/reports/admin');
+        let url = '/api/reports/admin';
+        const params = [];
+        let from = reportDateFrom;
+        let to = reportDateTo;
+        
+        if (reportPreset === 'today') {
+          const d = new Date().toISOString().slice(0, 10);
+          from = `${d} 00:00:00`;
+          to = `${d} 23:59:59`;
+        } else if (reportPreset === 'yesterday') {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          const dStr = d.toISOString().slice(0, 10);
+          from = `${dStr} 00:00:00`;
+          to = `${dStr} 23:59:59`;
+        } else if (reportPreset === '7days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 7);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        } else if (reportPreset === '30days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        }
+        
+        if (from) params.push(`date_from=${encodeURIComponent(from)}`);
+        if (to) params.push(`date_to=${encodeURIComponent(to)}`);
+        if (params.length > 0) url += `?${params.join('&')}`;
+
+        const repRes = await apiFetch(url);
         if (repRes.ok) {
           setReports(await repRes.json());
         } else {
@@ -326,18 +560,135 @@ export default function AdminPanel({ token }) {
           setError('Failed to fetch sales report summary.');
         }
       } else if (activeTab === 4) {
+        // Item Sales Report
+        let url = '/api/reports/item-wise';
+        const params = [];
+        let from = itemReportDateFrom;
+        let to = itemReportDateTo;
+
+        if (itemReportPreset === 'today') {
+          const d = new Date().toISOString().slice(0, 10);
+          from = `${d} 00:00:00`;
+          to = `${d} 23:59:59`;
+        } else if (itemReportPreset === 'yesterday') {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          const dStr = d.toISOString().slice(0, 10);
+          from = `${dStr} 00:00:00`;
+          to = `${dStr} 23:59:59`;
+        } else if (itemReportPreset === '7days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 7);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        } else if (itemReportPreset === '30days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        }
+
+        if (from) params.push(`date_from=${encodeURIComponent(from)}`);
+        if (to) params.push(`date_to=${encodeURIComponent(to)}`);
+        if (itemReportCategory !== 'all') params.push(`category_id=${itemReportCategory}`);
+        if (itemReportSearch) params.push(`search=${encodeURIComponent(itemReportSearch)}`);
+        if (itemReportSortBy) params.push(`sort_by=${itemReportSortBy}`);
+        if (itemReportSortOrder) params.push(`sort_order=${itemReportSortOrder}`);
+
+        if (params.length > 0) url += `?${params.join('&')}`;
+
+        const itemRes = await apiFetch(url);
+        if (itemRes.ok) {
+          setItemReportData(await itemRes.json());
+        } else {
+          setItemReportData([]);
+        }
+
+        if (categories.length === 0) {
+          const catRes = await apiFetch('/api/categories');
+          if (catRes.ok) setCategories(await catRes.json());
+        }
+      } else if (activeTab === 5) {
+        // Stock & Inventory Report
+        let url = '/api/inventory/report';
+        const params = [];
+        if (stockCategoryFilter !== 'all') params.push(`category_id=${stockCategoryFilter}`);
+        if (stockStatusFilter !== 'all') params.push(`status=${stockStatusFilter}`);
+        if (stockSearch) params.push(`search=${encodeURIComponent(stockSearch)}`);
+        if (params.length > 0) url += `?${params.join('&')}`;
+
+        const stockRes = await apiFetch(url);
+        if (stockRes.ok) {
+          setStockReportData(await stockRes.json());
+        } else {
+          setStockReportData({ items: [], summary: { total_items: 0, in_stock_count: 0, low_stock_count: 0, out_of_stock_count: 0 } });
+        }
+
+        if (categories.length === 0) {
+          const catRes = await apiFetch('/api/categories');
+          if (catRes.ok) setCategories(await catRes.json());
+        }
+      } else if (activeTab === 6) {
         const settingsRes = await apiFetch('/api/settings/receipt');
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json();
           setReceiptSettings(settingsData);
+          setWorkflowDraft(buildWorkflowDraft(settingsData));
+          setPermissionsDraft(buildPermissionsDraft(settingsData));
         }
-      } else if (activeTab === 5) {
+      } else if (activeTab === 7) {
         const usersRes = await apiFetch('/api/auth/users');
         if (usersRes.ok) {
           const usersData = await usersRes.json();
           setStaffUsers(Array.isArray(usersData) ? usersData : []);
         } else {
           setStaffUsers([]);
+        }
+      } else if (activeTab === 8) {
+        let from = historyDateFrom;
+        let to = historyDateTo;
+
+        if (historyPreset === 'today') {
+          const d = new Date().toISOString().slice(0, 10);
+          from = `${d} 00:00:00`;
+          to = `${d} 23:59:59`;
+        } else if (historyPreset === 'yesterday') {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          const dStr = d.toISOString().slice(0, 10);
+          from = `${dStr} 00:00:00`;
+          to = `${dStr} 23:59:59`;
+        } else if (historyPreset === '7days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 7);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        } else if (historyPreset === '30days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        }
+
+        let url = `/api/orders/history/list?limit=${historyLimit}&offset=${historyPage * historyLimit}`;
+        if (historySearch) url += `&search=${encodeURIComponent(historySearch)}`;
+        if (historyCashier !== 'all') url += `&cashier_id=${historyCashier}`;
+        if (historyPaymentMode !== 'all') url += `&payment_mode=${historyPaymentMode}`;
+        if (historyStatus !== 'all') url += `&order_status=${historyStatus}`;
+        if (from) url += `&date_from=${encodeURIComponent(from)}`;
+        if (to) url += `&date_to=${encodeURIComponent(to)}`;
+
+        const orderRes = await apiFetch(url);
+        if (orderRes.ok) {
+          setHistoryOrders(await orderRes.json());
+        } else {
+          setHistoryOrders([]);
+        }
+        // Load staff users as well for history filter selector
+        const usersRes = await apiFetch('/api/auth/users');
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          setStaffUsers(Array.isArray(usersData) ? usersData : []);
         }
       }
     } catch (err) {
@@ -348,6 +699,109 @@ export default function AdminPanel({ token }) {
       setStaffUsers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Item Sales History Handler
+  const handleOpenItemHistory = async (item) => {
+    setSelectedReportItem(item);
+    setItemHistoryModalOpen(true);
+    setLoadingItemHistory(true);
+    try {
+      let from = itemReportDateFrom;
+      let to = itemReportDateTo;
+      if (itemReportPreset === 'today') {
+        const d = new Date().toISOString().slice(0, 10);
+        from = `${d} 00:00:00`;
+        to = `${d} 23:59:59`;
+      } else if (itemReportPreset === 'yesterday') {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        const dStr = d.toISOString().slice(0, 10);
+        from = `${dStr} 00:00:00`;
+        to = `${dStr} 23:59:59`;
+      } else if (itemReportPreset === '30days') {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        from = d.toISOString().slice(0, 19).replace('T', ' ');
+        to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      }
+
+      const res = await apiFetch(`/api/reports/item-wise/${item.item_id}/history?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);
+      if (res.ok) {
+        setItemHistoryData(await res.json());
+      } else {
+        setItemHistoryData([]);
+      }
+    } catch (err) {
+      notify.error('Failed to load item sales history.', 'Error');
+    } finally {
+      setLoadingItemHistory(false);
+    }
+  };
+
+  // Stock Adjustment Handlers
+  const handleOpenAdjustStock = (item) => {
+    setSelectedStockItem(item);
+    setAdjustmentType('add');
+    setAdjustQuantity('10');
+    setAdjustUnit(item.unit || 'pcs');
+    setAdjustThreshold(item.low_stock_threshold !== undefined ? item.low_stock_threshold.toString() : '10');
+    setAdjustReason('Stock Replenishment');
+    setAdjustStockModalOpen(true);
+  };
+
+  const handleSaveStockAdjustment = async () => {
+    if (!selectedStockItem || !adjustQuantity || isNaN(parseFloat(adjustQuantity))) {
+      notify.error('Please enter a valid stock quantity.', 'Validation Error');
+      return;
+    }
+    setSavingStockAdjust(true);
+    try {
+      const res = await apiFetch('/api/inventory/adjust', {
+        method: 'POST',
+        body: {
+          menuItemId: selectedStockItem.id,
+          adjustmentType,
+          quantity: parseFloat(adjustQuantity),
+          unit: adjustUnit,
+          lowStockThreshold: parseFloat(adjustThreshold),
+          reason: adjustReason
+        }
+      });
+      if (res.ok) {
+        notify.success(`Stock for "${selectedStockItem.name}" updated successfully.`, 'Stock Updated');
+        setAdjustStockModalOpen(false);
+        fetchData();
+      } else {
+        const errData = await res.json();
+        notify.error(errData.error || 'Failed to adjust stock.', 'Error');
+      }
+    } catch (err) {
+      notify.error('Failed to submit stock adjustment.', 'Error');
+    } finally {
+      setSavingStockAdjust(false);
+    }
+  };
+
+  // Stock Audit Log Handler
+  const handleOpenStockLogs = async (item = null) => {
+    setSelectedStockLogItem(item);
+    setStockLogsModalOpen(true);
+    setLoadingStockLogs(true);
+    try {
+      let url = '/api/inventory/logs';
+      if (item) url += `?menu_item_id=${item.id}`;
+      const res = await apiFetch(url);
+      if (res.ok) {
+        setStockLogsData(await res.json());
+      } else {
+        setStockLogsData([]);
+      }
+    } catch (err) {
+      notify.error('Failed to load stock audit logs.', 'Error');
+    } finally {
+      setLoadingStockLogs(false);
     }
   };
 
@@ -465,11 +919,18 @@ export default function AdminPanel({ token }) {
     try {
       const res = await apiFetch('/api/settings/receipt', {
         method: 'POST',
-        body: receiptSettings
+        body: {
+          ...receiptSettings,
+          ...workflowDraft,
+          ...permissionsDraft
+        }
       });
       if (res.ok) {
         const data = await res.json();
-        setReceiptSettings(data.settings);
+        const updated = data.settings || data;
+        setReceiptSettings(updated);
+        setWorkflowDraft(buildWorkflowDraft(updated));
+        setPermissionsDraft(buildPermissionsDraft(updated));
         notify.success('Receipt & KOT settings saved successfully.', 'Settings Saved');
       } else {
         const errData = await res.json();
@@ -489,14 +950,14 @@ export default function AdminPanel({ token }) {
         method: 'POST',
         body: { print_type: type }
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
-        notify.success(data.message, 'Test Print Dispatched');
+        notify.success(data.message, 'Test Print Successful', 4000);
       } else {
-        notify.error('Failed to execute test print.', 'Error');
+        notify.error(data.error || 'Failed to execute test print.', 'Printer Error');
       }
     } catch (err) {
-      notify.error('Failed to execute test print.', 'Error');
+      notify.error(err.message || 'Failed to execute test print.', 'Printer Error');
     } finally {
       setTestingPrint(false);
     }
@@ -837,7 +1298,7 @@ export default function AdminPanel({ token }) {
   };
 
   return (
-    <Box sx={{ width: '100%', height: '100%', overflowY: 'auto' }}>
+    <Box ref={scrollRef} onScroll={handleScroll} sx={{ width: '100%', height: '100%', overflowY: 'auto' }}>
       <Container
         maxWidth={false}
         disableGutters
@@ -853,22 +1314,54 @@ export default function AdminPanel({ token }) {
           gap: 3
         }}
       >
-        {/* Unified Horizontal Tab Navigation Bar */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%', mb: 0.5 }}>
+        {/* Sticky Unified Horizontal Tab Navigation Bar */}
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 100,
+            bgcolor: 'background.paper',
+            width: '100%',
+            pt: { xs: 1, md: 1.5 },
+            pb: 0.5,
+            boxShadow: isScrolled ? '0 4px 12px rgba(0,0,0,0.06)' : 'none',
+            transition: 'box-shadow 0.2s ease-in-out',
+            borderBottom: 1,
+            borderColor: 'divider',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: { xs: 24, md: 0 },
+              pointerEvents: 'none',
+              background: 'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.95))',
+              zIndex: 2
+            }
+          }}
+        >
           <Tabs
             value={activeTab}
             onChange={(e, val) => setActiveTab(val)}
             variant="scrollable"
             scrollButtons="auto"
+            allowScrollButtonsMobile
             textColor="primary"
             indicatorColor="primary"
             sx={{
+              '& .MuiTabs-scrollableX': {
+                WebkitOverflowScrolling: 'touch',
+                scrollSnapType: 'x proximity'
+              },
               '& .MuiTab-root': {
                 fontWeight: 800,
                 fontSize: { xs: '0.85rem', md: '0.95rem' },
                 textTransform: 'none',
                 minHeight: 48,
                 px: { xs: 2, md: 3 },
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
                 transition: 'all 0.2s ease',
                 '&:hover': {
                   color: 'primary.main',
@@ -881,8 +1374,11 @@ export default function AdminPanel({ token }) {
             <Tab icon={<Layers size={18} />} iconPosition="start" label="Categories" />
             <Tab icon={<Wifi size={18} />} iconPosition="start" label="Printers" />
             <Tab icon={<FileText size={18} />} iconPosition="start" label="Sales Reports" />
+            <Tab icon={<Utensils size={18} />} iconPosition="start" label="Item Sales Report" />
+            <Tab icon={<Boxes size={18} />} iconPosition="start" label="Stock Report" />
             <Tab icon={<Settings size={18} />} iconPosition="start" label="Receipt & KOT Settings" />
             <Tab icon={<Users size={18} />} iconPosition="start" label="Staff & Cashiers" />
+            <Tab icon={<History size={18} />} iconPosition="start" label="Order History" />
           </Tabs>
         </Box>
 
@@ -894,21 +1390,37 @@ export default function AdminPanel({ token }) {
 
         {/* --- FOOD ITEMS SUB-TAB --- */}
         {activeTab === 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
-            {/* Header Section */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, width: '100%' }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>Manage Food Menu Items</Typography>
-                <Typography variant="caption" color="text.secondary">Configure dish prices, GST levels, categories, and availability.</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            {/* Header Section: Single compact 1-row layout on mobile */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Manage Food Menu Items
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Configure dish prices, GST levels, categories, and availability.
+                </Typography>
               </Box>
-              <Button variant="contained" startIcon={<Plus size={16} />} onClick={handleOpenAddMenu} sx={{ fontWeight: 800, px: 2.5, py: 1 }}>
+              <Button
+                variant="contained"
+                startIcon={<Plus size={14} />}
+                onClick={handleOpenAddMenu}
+                sx={{
+                  fontWeight: 800,
+                  px: { xs: 1.25, sm: 2.5 },
+                  py: { xs: 0.5, sm: 1 },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
                 Add Menu Item
               </Button>
             </Box>
 
             {/* SEARCH & FILTER TOOLBAR */}
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper', width: '100%' }}>
-              <Grid container spacing={2} sx={{ alignItems: 'center' }}>
+            <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 2.5, bgcolor: 'background.paper', width: '100%' }}>
+              <Grid container spacing={{ xs: 1, sm: 2 }} sx={{ alignItems: 'center' }}>
                 {/* Search Bar */}
                 <Grid xs={12} sm={6} md={4}>
                   <TextField
@@ -1384,27 +1896,43 @@ export default function AdminPanel({ token }) {
 
         {/* --- CATEGORIES SUB-TAB --- */}
         {activeTab === 1 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, width: '100%' }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>Manage Menu Categories</Typography>
-                <Typography variant="caption" color="text.secondary">Define custom layout category filters & display sequences.</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Manage Menu Categories
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Define custom layout category filters & display sequences.
+                </Typography>
               </Box>
-              <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => { setDialogType('add_category'); setCategoryName(''); setCategoryDesc(''); setDialogOpen(true); }} sx={{ fontWeight: 800, px: 2.5, py: 1 }}>
+              <Button
+                variant="contained"
+                startIcon={<Plus size={14} />}
+                onClick={() => { setDialogType('add_category'); setCategoryName(''); setCategoryDesc(''); setDialogOpen(true); }}
+                sx={{
+                  fontWeight: 800,
+                  px: { xs: 1.25, sm: 2.5 },
+                  py: { xs: 0.5, sm: 1 },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
                 Add Category
               </Button>
             </Box>
 
             <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5, width: '100%' }}>
-              <Table sx={{ width: '100%' }}>
+              <Table sx={{ width: '100%' }} size="small">
                 <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold', width: 50 }}>Drag</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', width: 90 }}>Move</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', width: 60 }}>Seq</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', minWidth: 180 }}>Category Name</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', width: '100%', minWidth: 300 }}>Description</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', minWidth: 100 }}>Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', width: 40, px: 1 }}>Drag</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', width: 80, display: { xs: 'none', md: 'table-cell' } }}>Move</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', width: 50, px: 1 }}>Seq</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', minWidth: 140 }}>Category Name</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', width: '100%', minWidth: 180, display: { xs: 'none', sm: 'table-cell' } }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', minWidth: 70 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1424,12 +1952,12 @@ export default function AdminPanel({ token }) {
                         '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
-                      <TableCell>
+                      <TableCell sx={{ px: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'grab', color: 'text.secondary' }}>
                           <GripVertical size={18} />
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title="Move Up">
                             <span>
@@ -1475,13 +2003,29 @@ export default function AdminPanel({ token }) {
 
         {/* --- PRINTERS SUB-TAB --- */}
         {activeTab === 2 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, width: '100%' }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>Printers & Terminals</Typography>
-                <Typography variant="caption" color="text.secondary">Register hardware LAN IP addresses & dynamic ESC/POS configurations.</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Printers & Terminals
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Register hardware LAN IP addresses & dynamic ESC/POS configurations.
+                </Typography>
               </Box>
-              <Button variant="contained" startIcon={<Plus size={16} />} onClick={handleOpenAddPrinter} sx={{ fontWeight: 800, px: 2.5, py: 1 }}>
+              <Button
+                variant="contained"
+                startIcon={<Plus size={14} />}
+                onClick={handleOpenAddPrinter}
+                sx={{
+                  fontWeight: 800,
+                  px: { xs: 1.25, sm: 2.5 },
+                  py: { xs: 0.5, sm: 1 },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
                 Add Printer
               </Button>
             </Box>
@@ -1490,15 +2034,15 @@ export default function AdminPanel({ token }) {
               sx={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '1.25rem',
+                gap: { xs: '0.75rem', sm: '1.25rem' },
                 width: '100%'
               }}
             >
               {printers.map(printer => (
-                <Card variant="outlined" key={printer.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRadius: 3 }}>
-                  <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Card variant="outlined" key={printer.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRadius: 2.5 }}>
+                  <CardContent sx={{ p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{printer.name}</Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, fontSize: { xs: '0.9rem', sm: '1rem' } }}>{printer.name}</Typography>
                       <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                         <Tooltip title={`Click to set status to ${printer.status === 'offline' ? 'ONLINE' : 'OFFLINE'}`}>
                           <Chip
@@ -1508,23 +2052,24 @@ export default function AdminPanel({ token }) {
                             variant="outlined"
                             onClick={() => handleTogglePrinterStatus(printer)}
                             clickable
-                            sx={{ fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
+                            sx={{ fontWeight: 800, fontSize: '10px', height: 22, cursor: 'pointer' }}
                           />
                         </Tooltip>
-                        <Chip label={printer.role} size="small" color="primary" sx={{ fontWeight: 700, textTransform: 'uppercase' }} />
+                        <Chip label={printer.role} size="small" color="primary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '10px', height: 22 }} />
                       </Box>
                     </Box>
 
-                    <Box sx={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 0.5, color: 'text.secondary' }}>
-                      <Box>IP Address: <b>{printer.ip_address}:{printer.port || 9100}</b></Box>
-                      <Box>Paper Width: <b>{printer.paper_width || 80}mm Thermal</b></Box>
-                      <Box>Interface: <b>{(printer.type || 'lan').toUpperCase()}</b></Box>
-                      {printer.is_default_receipt === 1 && <Chip label="⭐ Default Receipt Printer" size="small" color="warning" sx={{ width: 'fit-content', mt: 0.5, fontWeight: 700 }} />}
-                      {printer.is_default_kot === 1 && <Chip label="👨‍🍳 Default KOT Printer" size="small" color="secondary" sx={{ width: 'fit-content', mt: 0.5, fontWeight: 700 }} />}
+                    {/* Compact 2-Column Key-Value Grid on Mobile */}
+                    <Box sx={{ fontSize: { xs: 12, sm: 13 }, display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr' }, gap: 0.5, color: 'text.secondary', mt: 0.5 }}>
+                      <Box>IP: <b>{printer.ip_address}:{printer.port || 9100}</b></Box>
+                      <Box>Paper: <b>{printer.paper_width || 80}mm Thermal</b></Box>
+                      <Box sx={{ gridColumn: { xs: 'span 2', sm: 'span 1' } }}>Type: <b>{(printer.type || 'lan').toUpperCase()}</b></Box>
+                      {printer.is_default_receipt === 1 && <Chip label="⭐ Default Receipt" size="small" color="warning" sx={{ width: 'fit-content', mt: 0.5, fontWeight: 700, fontSize: '10px', height: 22 }} />}
+                      {printer.is_default_kot === 1 && <Chip label="👨‍🍳 Default KOT" size="small" color="secondary" sx={{ width: 'fit-content', mt: 0.5, fontWeight: 700, fontSize: '10px', height: 22 }} />}
                     </Box>
 
                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                      <Button onClick={() => handleTestPrinter(printer)} variant="outlined" size="small" sx={{ flex: 1, fontWeight: 700 }}>Test Socket</Button>
+                      <Button onClick={() => handleTestPrinter(printer)} variant="outlined" size="small" sx={{ flex: 1, fontWeight: 700, fontSize: '0.75rem', py: 0.5 }}>Test Socket</Button>
                       <IconButton onClick={() => handleOpenEditPrinter(printer)} size="small" color="primary"><Edit2 size={16} /></IconButton>
                       <IconButton onClick={() => handleDeletePrinter(printer.id)} size="small" color="error"><Trash2 size={16} /></IconButton>
                     </Box>
@@ -1537,115 +2082,769 @@ export default function AdminPanel({ token }) {
 
         {/* --- REPORTS SUB-TAB --- */}
         {activeTab === 3 && reports && reports.summary && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, width: '100%' }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>Sales Dashboard Overview</Typography>
-                <Typography variant="caption" color="text.secondary">View aggregates, revenue metrics, and tax summaries.</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5, md: 4 }, width: '100%' }}>
+            {/* Header Section: Single compact 1-row layout on mobile */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.1rem, 4.2vw, 1.375rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Sales Dashboard Overview
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  View aggregates, revenue metrics, and tax summaries.
+                </Typography>
               </Box>
-              <Button variant="outlined" startIcon={<Download size={16} />} href={`/api/reports/export/sales-csv?token=${token}`} target="_blank" sx={{ fontWeight: 800, px: 2.5, py: 1 }}>
-                Export CSV Logs
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<FileSpreadsheet size={15} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/reports/export/sales-excel?preset=${reportPreset}&date_from=${reportDateFrom}&date_to=${reportDateTo}`, `sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                      notify.success('Excel report downloaded successfully.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Excel report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Export Excel (.xlsx)
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<Download size={14} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/reports/export/sales-csv?preset=${reportPreset}&date_from=${reportDateFrom}&date_to=${reportDateTo}`, `sales_report_${new Date().toISOString().slice(0, 10)}.csv`);
+                      notify.success('CSV report downloaded successfully.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download CSV report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1, sm: 1.5 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  CSV
+                </Button>
+              </Box>
             </Box>
 
-            {/* Aggregates Reflow CSS Grid */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '1.25rem',
-                width: '100%'
-              }}
-            >
-              <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Gross Revenue</Typography>
-                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 800, mt: 0.5 }}>Rs. {reports.summary.totalRevenue.toFixed(2)}</Typography>
-              </Box>
-              <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Tax Collected</Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>Rs. {reports.summary.totalTax.toFixed(2)}</Typography>
-              </Box>
-              <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Discounts Applied</Typography>
-                <Typography variant="h5" color="warning.main" sx={{ fontWeight: 800, mt: 0.5 }}>Rs. {reports.summary.totalDiscount.toFixed(2)}</Typography>
-              </Box>
-              <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Total Orders</Typography>
-                <Typography variant="h5" color="secondary.main" sx={{ fontWeight: 800, mt: 0.5 }}>{reports.summary.totalOrders}</Typography>
-              </Box>
-            </Box>
+            {/* Date Preset Filter Bar & Custom Range */}
+            <DateRangePicker
+              preset={reportPreset}
+              onPresetChange={setReportPreset}
+              dateFrom={reportDateFrom}
+              onDateFromChange={setReportDateFrom}
+              dateTo={reportDateTo}
+              onDateToChange={setReportDateTo}
+            />
+
+            {/* Aggregates Reflow 2-Column Grid on Mobile / 4-Column on Desktop */}
+            <Grid container spacing={{ xs: 1, sm: 2, md: 2.5 }} sx={{ width: '100%' }}>
+              <Grid size={{ xs: 6, sm: 6, md: 3 }}>
+                <Box sx={{ p: { xs: 1, sm: 2, md: 2.5 }, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2.5, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>Gross Revenue</Typography>
+                  <Typography variant="h5" color="primary.main" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.05rem, 4.5vw, 1.3rem)', sm: '1.4rem', md: '1.5rem' } }}>Rs. {reports.summary.totalRevenue.toFixed(2)}</Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 6, md: 3 }}>
+                <Box sx={{ p: { xs: 1, sm: 2, md: 2.5 }, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>Tax Collected</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.05rem, 4.5vw, 1.3rem)', sm: '1.4rem', md: '1.5rem' } }}>Rs. {reports.summary.totalTax.toFixed(2)}</Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 6, md: 3 }}>
+                <Box sx={{ p: { xs: 1, sm: 2, md: 2.5 }, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>Discounts Applied</Typography>
+                  <Typography variant="h5" color="warning.main" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.05rem, 4.5vw, 1.3rem)', sm: '1.4rem', md: '1.5rem' } }}>Rs. {reports.summary.totalDiscount.toFixed(2)}</Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 6, md: 3 }}>
+                <Box sx={{ p: { xs: 1, sm: 2, md: 2.5 }, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>Total Orders</Typography>
+                  <Typography variant="h5" color="secondary.main" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.05rem, 4.5vw, 1.3rem)', sm: '1.4rem', md: '1.5rem' } }}>{reports.summary.totalOrders}</Typography>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Payment Method Collections Breakdown */}
+            <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 2, md: 3 }, borderRadius: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: { xs: 1, sm: 2 }, fontSize: { xs: '0.9rem', sm: '1rem' } }}>💳 Payment Method Collections Breakdown</Typography>
+              <Divider sx={{ mb: { xs: 1, sm: 2 } }} />
+              
+              <Grid container spacing={{ xs: 1, sm: 2, md: 3 }}>
+                {[
+                  { id: 'cash', label: 'Cash Collection', icon: '💵' },
+                  { id: 'upi', label: 'UPI QR Collections', icon: '📱' },
+                  { id: 'card', label: 'Card Swipe Collections', icon: '💳' },
+                  { id: 'wallet', label: 'Digital Wallet Collections', icon: '👛' },
+                  { id: 'other', label: 'Other Payment Collections', icon: '⚙️' }
+                ].map(mode => {
+                  let amount = 0;
+                  if (reports.payments && Array.isArray(reports.payments)) {
+                    if (mode.id === 'upi') {
+                      amount = reports.payments
+                        .filter(p => ['upi', 'gpay', 'phonepe', 'paytm'].includes((p.payment_mode || '').toLowerCase()))
+                        .reduce((sum, p) => sum + parseFloat(p.totalAmount || 0), 0);
+                    } else if (mode.id === 'card') {
+                      amount = reports.payments
+                        .filter(p => ['card', 'credit', 'debit'].includes((p.payment_mode || '').toLowerCase()))
+                        .reduce((sum, p) => sum + parseFloat(p.totalAmount || 0), 0);
+                    } else {
+                      amount = reports.payments
+                        .filter(p => (p.payment_mode || '').toLowerCase() === mode.id)
+                        .reduce((sum, p) => sum + parseFloat(p.totalAmount || 0), 0);
+                    }
+                  }
+                  
+                  return (
+                    <Grid size={{ xs: 6, sm: 4, md: 2.4 }} key={mode.id}>
+                      <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, textAlign: 'center', bgcolor: 'action.hover', borderRadius: '10px' }}>
+                        <span style={{ fontSize: 18 }}>{mode.icon}</span>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 'bold', mt: 0.25, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
+                          {mode.label}
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(0.85rem, 3.8vw, 1.15rem)', sm: '1.1rem', md: '1.25rem' } }}>
+                          Rs. {amount.toFixed(2)}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Paper>
           </Box>
         )}
 
-        {/* --- TAB 4: RECEIPT & KOT CUSTOMIZATION --- */}
+        {/* --- TAB 4: ITEM-WISE SALES REPORT --- */}
         {activeTab === 4 && (
-          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            
-            {/* Header Action Bar */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                  Receipt & Kitchen Order Ticket (KOT) Customization
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            {/* Header Section */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Item-Wise Sales Analytics
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Detailed performance, dish-level quantity, net sales, and pricing trends.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<FileSpreadsheet size={15} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/reports/item-wise/export-excel?preset=${itemReportPreset}&date_from=${itemReportDateFrom}&date_to=${itemReportDateTo}&category_id=${itemReportCategory}&search=${encodeURIComponent(itemReportSearch)}&sort_by=${itemReportSortBy}&sort_order=${itemReportSortOrder}`, `item_sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                      notify.success('Item Sales Excel report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Excel report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Export Excel (.xlsx)
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<Download size={14} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/reports/item-wise/export-csv?preset=${itemReportPreset}&date_from=${itemReportDateFrom}&date_to=${itemReportDateTo}&category_id=${itemReportCategory}&search=${encodeURIComponent(itemReportSearch)}&sort_by=${itemReportSortBy}&sort_order=${itemReportSortOrder}`, `item_sales_report_${new Date().toISOString().slice(0, 10)}.csv`);
+                      notify.success('Item Sales CSV report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download CSV report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1, sm: 1.5 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  CSV
+                </Button>
+              </Box>
+            </Box>
+
+            {/* Filter & Toolbar Row */}
+            <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 2.5, bgcolor: 'background.paper', width: '100%' }}>
+              <Grid container spacing={{ xs: 1, sm: 2 }} sx={{ alignItems: 'center' }}>
+                {/* Reusable Date Range Picker */}
+                <Grid size={{ xs: 12 }}>
+                  <DateRangePicker
+                    preset={itemReportPreset}
+                    onPresetChange={setItemReportPreset}
+                    dateFrom={itemReportDateFrom}
+                    onDateFromChange={setItemReportDateFrom}
+                    dateTo={itemReportDateTo}
+                    onDateToChange={setItemReportDateTo}
+                  />
+                </Grid>
+
+                {/* Search Input */}
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search dish or SKU..."
+                    value={itemReportSearch}
+                    onChange={e => setItemReportSearch(e.target.value)}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search size={18} style={{ color: '#64748b' }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: itemReportSearch ? (
+                          <InputAdornment position="end">
+                            <IconButton size="small" onClick={() => setItemReportSearch('')}>
+                              <X size={16} />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null
+                      }
+                    }}
+                  />
+                </Grid>
+
+                {/* Category Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={itemReportCategory}
+                      label="Category"
+                      onChange={e => setItemReportCategory(e.target.value)}
+                    >
+                      <MenuItem value="all">All Categories</MenuItem>
+                      {categories.map(c => (
+                        <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Sort By Dropdown */}
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Sort By</InputLabel>
+                    <Select
+                      value={`${itemReportSortBy}_${itemReportSortOrder}`}
+                      label="Sort By"
+                      onChange={e => {
+                        const [by, ord] = e.target.value.split('_');
+                        setItemReportSortBy(by);
+                        setItemReportSortOrder(ord);
+                      }}
+                    >
+                      <MenuItem value="qtySold_DESC">Highest Qty Sold ↓</MenuItem>
+                      <MenuItem value="qtySold_ASC">Lowest Qty Sold ↑</MenuItem>
+                      <MenuItem value="netSales_DESC">Highest Net Sales ↓</MenuItem>
+                      <MenuItem value="netSales_ASC">Lowest Net Sales ↑</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Item Sales Summary Cards */}
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Items Sold</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: 'primary.main', mt: 0.5 }}>
+                    {itemReportData.reduce((sum, i) => sum + parseInt(i.qty_sold || 0), 0)} pcs
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Gross Sales</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
+                    Rs. {itemReportData.reduce((sum, i) => sum + parseFloat(i.gross_sales || 0), 0).toFixed(2)}
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Discounts</Typography>
+                  <Typography variant="h6" color="warning.main" sx={{ fontWeight: 800, mt: 0.5 }}>
+                    Rs. {itemReportData.reduce((sum, i) => sum + parseFloat(i.discount_given || 0), 0).toFixed(2)}
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>Net Revenue</Typography>
+                  <Typography variant="h6" color="secondary.main" sx={{ fontWeight: 800, mt: 0.5 }}>
+                    Rs. {itemReportData.reduce((sum, i) => sum + parseFloat(i.net_sales || 0), 0).toFixed(2)}
+                  </Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Main Data Table */}
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3, border: 1, borderColor: 'divider' }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>Item Name</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>SKU</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Qty Sold</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Gross Sales</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Discount</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>GST</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Net Sales</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Avg Selling Price</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Last Sold</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800 }}>History</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
+                        <CircularProgress size={30} />
+                      </TableCell>
+                    </TableRow>
+                  ) : itemReportData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                        No item sales data found for the selected filters.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    itemReportData.map((row, idx) => (
+                      <TableRow key={idx} hover>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          <Button
+                            variant="text"
+                            color="primary"
+                            onClick={() => handleOpenItemHistory(row)}
+                            sx={{ textTransform: 'none', p: 0, fontWeight: 800, minWidth: 'auto', textAlign: 'left' }}
+                          >
+                            {row.name}
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={row.category_name} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{row.sku || '-'}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: 'primary.main' }}>{row.qty_sold}</TableCell>
+                        <TableCell align="right">Rs. {parseFloat(row.gross_sales || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right" sx={{ color: 'warning.main' }}>Rs. {parseFloat(row.discount_given || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">Rs. {parseFloat(row.gst_collected || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: 'secondary.main' }}>Rs. {parseFloat(row.net_sales || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">Rs. {parseFloat(row.avg_selling_price || 0).toFixed(2)}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                          {row.last_sold_at ? new Date(row.last_sold_at).toLocaleString() : 'N/A'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenItemHistory(row)} title="View Sales History">
+                            <FileText size={16} />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+
+        {/* --- TAB 5: STOCK & INVENTORY REPORT --- */}
+        {activeTab === 5 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            {/* Header Section */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Stock & Inventory Management
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Real-time inventory levels, low stock alerts, manual adjustments, and audit trail.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<FileSpreadsheet size={15} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/inventory/report/export-excel?category_id=${stockCategoryFilter}&status=${stockStatusFilter}&search=${encodeURIComponent(stockSearch)}`, `stock_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                      notify.success('Stock Inventory Excel report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Stock Excel report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Export Excel (.xlsx)
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<Download size={14} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/inventory/report/export-csv?category_id=${stockCategoryFilter}&status=${stockStatusFilter}&search=${encodeURIComponent(stockSearch)}`, `stock_report_${new Date().toISOString().slice(0, 10)}.csv`);
+                      notify.success('Stock Inventory CSV report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Stock CSV report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1, sm: 1.5 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  CSV
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  startIcon={<FileText size={14} />}
+                  onClick={() => handleOpenStockLogs(null)}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2.5 },
+                    py: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Stock<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}> Audit Logs</Box>
+                </Button>
+              </Box>
+            </Box>
+
+            {/* Summary Dashboard Alert Metric Cards - 2-Column Grid on Mobile */}
+            <Grid container spacing={{ xs: 1, sm: 2 }}>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, borderRadius: 2.5, bgcolor: 'background.paper', borderLeft: '4px solid #3b82f6' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>Total Items</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.1rem, 4.5vw, 1.4rem)', sm: '1.5rem' } }}>{stockReportData.summary?.total_items || 0}</Typography>
+                </Paper>
+              </Grid>
+
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, borderRadius: 2.5, bgcolor: 'background.paper', borderLeft: '4px solid #10b981' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>In Stock</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800, color: 'success.main', mt: 0.25, fontSize: { xs: 'clamp(1.1rem, 4.5vw, 1.4rem)', sm: '1.5rem' } }}>
+                    {stockReportData.summary?.in_stock_count || 0}
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper
+                  variant="outlined"
+                  onClick={() => setStockStatusFilter('low_stock')}
+                  sx={{ p: { xs: 1, sm: 2 }, borderRadius: 2.5, bgcolor: stockReportData.summary?.low_stock_count > 0 ? 'rgba(245, 158, 11, 0.08)' : 'background.paper', borderLeft: '4px solid #f59e0b', cursor: 'pointer' }}
+                >
+                  <Typography variant="caption" color="warning.main" sx={{ fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
+                    <AlertTriangle size={12} /> Low Stock
+                  </Typography>
+                  <Typography variant="h5" color="warning.main" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.1rem, 4.5vw, 1.4rem)', sm: '1.5rem' } }}>
+                    {stockReportData.summary?.low_stock_count || 0}
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Paper
+                  variant="outlined"
+                  onClick={() => setStockStatusFilter('out_of_stock')}
+                  sx={{ p: { xs: 1, sm: 2 }, borderRadius: 2.5, bgcolor: stockReportData.summary?.out_of_stock_count > 0 ? 'rgba(239, 68, 68, 0.08)' : 'background.paper', borderLeft: '4px solid #ef4444', cursor: 'pointer' }}
+                >
+                  <Typography variant="caption" color="error.main" sx={{ fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
+                    <XCircle size={12} /> Out of Stock
+                  </Typography>
+                  <Typography variant="h5" color="error.main" sx={{ fontWeight: 800, mt: 0.25, fontSize: { xs: 'clamp(1.1rem, 4.5vw, 1.4rem)', sm: '1.5rem' } }}>
+                    {stockReportData.summary?.out_of_stock_count || 0}
+                  </Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Filter Toolbar */}
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.paper', width: '100%' }}>
+              <Grid container spacing={2} sx={{ alignItems: 'center' }}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search dish or SKU..."
+                    value={stockSearch}
+                    onChange={e => setStockSearch(e.target.value)}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search size={18} style={{ color: '#64748b' }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: stockSearch ? (
+                          <InputAdornment position="end">
+                            <IconButton size="small" onClick={() => setStockSearch('')}>
+                              <X size={16} />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null
+                      }
+                    }}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={stockCategoryFilter}
+                      label="Category"
+                      onChange={e => setStockCategoryFilter(e.target.value)}
+                    >
+                      <MenuItem value="all">All Categories</MenuItem>
+                      {categories.map(c => (
+                        <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Stock Status Filter</InputLabel>
+                    <Select
+                      value={stockStatusFilter}
+                      label="Stock Status Filter"
+                      onChange={e => setStockStatusFilter(e.target.value)}
+                    >
+                      <MenuItem value="all">All Stock Statuses</MenuItem>
+                      <MenuItem value="in_stock">In Stock Only</MenuItem>
+                      <MenuItem value="low_stock">⚠️ Low Stock Alerts Only</MenuItem>
+                      <MenuItem value="out_of_stock">🚨 Out of Stock Only</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Inventory Data Table */}
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3, border: 1, borderColor: 'divider' }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>Item Name</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>SKU</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Current Stock</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800 }}>Unit</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Low Stock Threshold</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800 }}>Stock Status</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Last Updated</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                        <CircularProgress size={30} />
+                      </TableCell>
+                    </TableRow>
+                  ) : (stockReportData.items || []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                        No stock inventory records match the selected criteria.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    (stockReportData.items || []).map(row => {
+                      const curStock = parseFloat(row.current_stock || 0);
+                      const lowThresh = parseFloat(row.low_stock_threshold || 10);
+                      const isOutOfStock = curStock <= 0;
+                      const isLowStock = !isOutOfStock && curStock <= lowThresh;
+
+                      return (
+                        <TableRow
+                          key={row.id}
+                          hover
+                          sx={{
+                            bgcolor: isOutOfStock ? 'rgba(239, 68, 68, 0.04)' : isLowStock ? 'rgba(245, 158, 11, 0.04)' : 'inherit'
+                          }}
+                        >
+                          <TableCell sx={{ fontWeight: 700 }}>{row.name}</TableCell>
+                          <TableCell>
+                            <Chip label={row.category_name} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{row.sku || '-'}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 800, fontSize: '1rem', color: isOutOfStock ? 'error.main' : isLowStock ? 'warning.main' : 'success.main' }}>
+                            {curStock}
+                          </TableCell>
+                          <TableCell align="center" sx={{ textTransform: 'lowercase', color: 'text.secondary' }}>{row.unit || 'pcs'}</TableCell>
+                          <TableCell align="right">{lowThresh}</TableCell>
+                          <TableCell align="center">
+                            {isOutOfStock ? (
+                              <Chip label="🚨 Out of Stock" color="error" size="small" sx={{ fontWeight: 800 }} />
+                            ) : isLowStock ? (
+                              <Chip label="⚠️ Low Stock" color="warning" size="small" sx={{ fontWeight: 800 }} />
+                            ) : (
+                              <Chip label="✅ In Stock" color="success" size="small" sx={{ fontWeight: 800 }} />
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                            {row.updated_at ? new Date(row.updated_at).toLocaleString() : 'N/A'}
+                          </TableCell>
+                          <TableCell align="center">
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="primary"
+                                onClick={() => handleOpenAdjustStock(row)}
+                                sx={{ fontWeight: 800, fontSize: '0.75rem', px: 1.5, py: 0.5 }}
+                              >
+                                Adjust Stock
+                              </Button>
+                              <IconButton size="small" onClick={() => handleOpenStockLogs(row)} title="Stock Logs">
+                                <FileText size={16} />
+                              </IconButton>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+
+        {/* --- TAB 6: RECEIPT & KOT CUSTOMIZATION --- */}
+        {activeTab === 6 && (
+          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 3 } }}>
+            {/* Header Action Bar */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Receipt & KOT Settings
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
                   Fully dynamic, database-driven templates. Changes immediately apply to thermal prints and POS previews.
                 </Typography>
               </Box>
 
-              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
                 <Button
                   variant="outlined"
                   color="secondary"
                   onClick={() => handleTestPrint('BOTH')}
                   disabled={testingPrint}
-                  startIcon={<Printer size={16} />}
-                  sx={{ fontWeight: 800 }}
+                  startIcon={<Printer size={14} />}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1, sm: 2 },
+                    py: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    whiteSpace: 'nowrap'
+                  }}
                 >
-                  {testingPrint ? 'Printing...' : 'Test Thermal Print'}
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Test Thermal Print</Box>
+                  <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Test</Box>
                 </Button>
                 <Button
                   variant="contained"
                   color="primary"
                   onClick={handleSaveReceiptSettings}
                   disabled={savingReceiptSettings}
-                  sx={{ fontWeight: 800, px: 3 }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 3 },
+                    py: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    whiteSpace: 'nowrap'
+                  }}
                 >
-                  {savingReceiptSettings ? <CircularProgress size={20} color="inherit" /> : 'Save Settings'}
+                  {savingReceiptSettings ? <CircularProgress size={18} color="inherit" /> : 'Save Settings'}
                 </Button>
               </Box>
             </Box>
 
             {/* Main Split Grid: [ Form Controls 60% | Real-time Thermal Paper Preview 40% ] */}
             <Grid container spacing={3}>
-              <Grid xs={12} lg={7} xl={8}>
+              <Grid size={{ xs: 12, lg: 7, xl: 8 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   
                   {/* Card 1: Business Branding & Contact Details */}
-                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
                       🏪 Restaurant Branding & Licensing
                     </Typography>
 
                     <Grid container spacing={2}>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Restaurant Display Name"
                           size="small"
                           fullWidth
                           value={receiptSettings.restaurant_name || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, restaurant_name: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Branch Name / Outlet"
                           size="small"
                           fullWidth
                           value={receiptSettings.branch_name || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, branch_name: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12}>
+                      <Grid size={{ xs: 12 }} sx={{ minWidth: 0 }}>
                         <TextField
                           label="Address"
                           size="small"
@@ -1654,63 +2853,70 @@ export default function AdminPanel({ token }) {
                           rows={2}
                           value={receiptSettings.address || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, address: e.target.value })}
+                          sx={{ width: '100%', boxSizing: 'border-box', '& .MuiInputBase-root': { width: '100%', boxSizing: 'border-box' }, '& textarea': { width: '100%', boxSizing: 'border-box' } }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Phone Number"
                           size="small"
                           fullWidth
                           value={receiptSettings.phone || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, phone: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="WhatsApp Number"
                           size="small"
                           fullWidth
                           value={receiptSettings.whatsapp || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, whatsapp: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Email Address"
                           size="small"
                           fullWidth
                           value={receiptSettings.email || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, email: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Website URL"
                           size="small"
                           fullWidth
                           value={receiptSettings.website || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, website: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="GSTIN Number"
                           size="small"
                           fullWidth
                           value={receiptSettings.gst_number || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, gst_number: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="FSSAI License Number"
                           size="small"
                           fullWidth
                           value={receiptSettings.fssai_number || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, fssai_number: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12}>
+                      <Grid size={{ xs: 12 }}>
                         <TextField
                           label="Restaurant Logo Image URL"
                           size="small"
@@ -1718,46 +2924,50 @@ export default function AdminPanel({ token }) {
                           placeholder="https://example.com/logo.png"
                           value={receiptSettings.logo_url || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
                     </Grid>
                   </Paper>
 
                   {/* Card 2: Header & Footer Text Messages */}
-                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
                       💬 Custom Messages & Notes
                     </Typography>
 
                     <Grid container spacing={2}>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Header Welcome Message"
                           size="small"
                           fullWidth
                           value={receiptSettings.header_message || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, header_message: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Thank You Message"
                           size="small"
                           fullWidth
                           value={receiptSettings.thank_you_message || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, thank_you_message: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid item xs={12}>
+                      <Grid size={{ xs: 12 }}>
                         <TextField
                           label="Footer Message / Social Handle"
                           size="small"
                           fullWidth
                           value={receiptSettings.footer_message || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })}
+                          sx={{ width: '100%' }}
                         />
                       </Grid>
-                      <Grid item xs={12}>
+                      <Grid size={{ xs: 12 }}>
                         <TextField
                           label="Terms & Conditions"
                           size="small"
@@ -1766,6 +2976,7 @@ export default function AdminPanel({ token }) {
                           rows={2}
                           value={receiptSettings.terms_conditions || ''}
                           onChange={e => setReceiptSettings({ ...receiptSettings, terms_conditions: e.target.value })}
+                          sx={{ width: '100%', boxSizing: 'border-box' }}
                         />
                       </Grid>
                     </Grid>
@@ -1778,7 +2989,7 @@ export default function AdminPanel({ token }) {
                     </Typography>
 
                     <Grid container spacing={2}>
-                      <Grid item xs={12} sm={4}>
+                      <Grid size={{ xs: 12, sm: 4 }}>
                         <FormControl fullWidth size="small">
                           <InputLabel>Paper Width</InputLabel>
                           <Select
@@ -1792,7 +3003,7 @@ export default function AdminPanel({ token }) {
                         </FormControl>
                       </Grid>
 
-                      <Grid item xs={12} sm={4}>
+                      <Grid size={{ xs: 12, sm: 4 }}>
                         <FormControl fullWidth size="small">
                           <InputLabel>Font Scale</InputLabel>
                           <Select
@@ -1807,7 +3018,7 @@ export default function AdminPanel({ token }) {
                         </FormControl>
                       </Grid>
 
-                      <Grid item xs={12} sm={4}>
+                      <Grid size={{ xs: 12, sm: 4 }}>
                         <FormControl fullWidth size="small">
                           <InputLabel>Header Alignment</InputLabel>
                           <Select
@@ -1840,7 +3051,7 @@ export default function AdminPanel({ token }) {
                         { key: 'show_payment_details', label: 'Show Payment Mode' },
                         { key: 'show_footer_notes', label: 'Show Terms & Footer Notes' }
                       ].map(t => (
-                        <Grid item xs={12} sm={6} key={t.key}>
+                        <Grid size={{ xs: 12, sm: 6 }} key={t.key}>
                           <Box
                             onClick={() => setReceiptSettings({ ...receiptSettings, [t.key]: receiptSettings[t.key] ? 0 : 1 })}
                             sx={{
@@ -1871,7 +3082,7 @@ export default function AdminPanel({ token }) {
                     </Typography>
 
                     <Grid container spacing={2}>
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="KOT Header Title"
                           size="small"
@@ -1880,7 +3091,7 @@ export default function AdminPanel({ token }) {
                           onChange={e => setReceiptSettings({ ...receiptSettings, kot_header: e.target.value })}
                         />
                       </Grid>
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Kitchen / Station Name"
                           size="small"
@@ -1889,7 +3100,7 @@ export default function AdminPanel({ token }) {
                           onChange={e => setReceiptSettings({ ...receiptSettings, kitchen_name: e.target.value })}
                         />
                       </Grid>
-                      <Grid item xs={12}>
+                      <Grid size={12}>
                         <TextField
                           label="KOT Footer Instruction"
                           size="small"
@@ -1899,7 +3110,7 @@ export default function AdminPanel({ token }) {
                         />
                       </Grid>
 
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <Box
                           onClick={() => setReceiptSettings({ ...receiptSettings, show_kot_order_notes: receiptSettings.show_kot_order_notes ? 0 : 1 })}
                           sx={{
@@ -1919,7 +3130,7 @@ export default function AdminPanel({ token }) {
                         </Box>
                       </Grid>
 
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <Box
                           onClick={() => setReceiptSettings({ ...receiptSettings, show_kot_time: receiptSettings.show_kot_time ? 0 : 1 })}
                           sx={{
@@ -1941,11 +3152,241 @@ export default function AdminPanel({ token }) {
                     </Grid>
                   </Paper>
 
+                  {/* Card 6: GST Configuration */}
+                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
+                      💸 GST Settings (Taxation Mode)
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>GST Mode</InputLabel>
+                          <Select
+                            value={receiptSettings.gst_mode || 'excluded'}
+                            label="GST Mode"
+                            onChange={e => setReceiptSettings({ ...receiptSettings, gst_mode: e.target.value })}
+                          >
+                            <MenuItem value="included">GST Included (Product price includes GST)</MenuItem>
+                            <MenuItem value="excluded">GST Excluded (GST is added during checkout)</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Default GST Rate (%)"
+                          type="number"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.default_gst_rate !== undefined ? receiptSettings.default_gst_rate : 5}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, default_gst_rate: parseFloat(e.target.value || 0) })}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {/* Card 7: POS Printing Stages Workflow */}
+                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        ⚙️ Print Stage Workflows
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        color="primary"
+                        onClick={handleSaveWorkflowSettings}
+                        disabled={savingWorkflow}
+                        sx={{ fontWeight: 800, px: 2 }}
+                      >
+                        {savingWorkflow ? 'Saving...' : 'Save Workflow Settings'}
+                      </Button>
+                    </Box>
+                    <Grid container spacing={2}>
+                      {/* Stage 1 Dropdown */}
+                      <Grid size={{ xs: 12, sm: workflowDraft.print_stage1_mode === 'show_popup' ? 12 : 6 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Stage 1 (Confirm/Hold Order)</InputLabel>
+                          <Select
+                            value={workflowDraft.print_stage1_mode}
+                            label="Stage 1 (Confirm/Hold Order)"
+                            onChange={e => setWorkflowDraft(prev => ({ ...prev, print_stage1_mode: e.target.value }))}
+                          >
+                            <MenuItem value="save_only">Save Only</MenuItem>
+                            <MenuItem value="print_receipt_only">Print Receipt Only</MenuItem>
+                            <MenuItem value="print_kot_only">Print KOT Only</MenuItem>
+                            <MenuItem value="print_kot_receipt">Print Receipt + KOT</MenuItem>
+                            <MenuItem value="show_popup">Show Action Popup</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {/* Stage 1 popup button visibility toggles */}
+                      {workflowDraft.print_stage1_mode === 'show_popup' && (
+                        <Grid size={12}>
+                          <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 1 }}>
+                              Stage 1 Popup — Configure visible buttons:
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                              {[
+                                { key: 'stage1_popup_save_only',    label: 'Save Only' },
+                                { key: 'stage1_popup_receipt_only', label: 'Print Receipt Only' },
+                                { key: 'stage1_popup_kot_only',     label: 'Print KOT Only' },
+                                { key: 'stage1_popup_kot_receipt',  label: 'Print Receipt + KOT' }
+                              ].map(opt => (
+                                <FormControlLabel
+                                  key={opt.key}
+                                  control={
+                                    <Switch
+                                      size="small"
+                                      checked={Number(workflowDraft[opt.key]) === 1}
+                                      onChange={e => setWorkflowDraft(prev => ({ ...prev, [opt.key]: e.target.checked ? 1 : 0 }))}
+                                      color="primary"
+                                    />
+                                  }
+                                  label={<Typography variant="body2" sx={{ fontWeight: 600 }}>{opt.label}</Typography>}
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        </Grid>
+                      )}
+
+                      {/* Stage 2 Dropdown */}
+                      <Grid size={{ xs: 12, sm: workflowDraft.print_stage2_mode === 'show_popup' ? 12 : 6 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Stage 2 (Complete Checkout/Pay)</InputLabel>
+                          <Select
+                            value={workflowDraft.print_stage2_mode}
+                            label="Stage 2 (Complete Checkout/Pay)"
+                            onChange={e => setWorkflowDraft(prev => ({ ...prev, print_stage2_mode: e.target.value }))}
+                          >
+                            <MenuItem value="save_only">Save Only</MenuItem>
+                            <MenuItem value="print_receipt_only">Print Receipt Only</MenuItem>
+                            <MenuItem value="print_kot_only">Print KOT Only</MenuItem>
+                            <MenuItem value="print_kot_receipt">Print Receipt + KOT</MenuItem>
+                            <MenuItem value="show_popup">Show Action Popup</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {/* Stage 2 popup button visibility toggles */}
+                      {workflowDraft.print_stage2_mode === 'show_popup' && (
+                        <Grid size={12}>
+                          <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 1 }}>
+                              Stage 2 Popup — Configure visible buttons:
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                              {[
+                                { key: 'stage2_popup_save_only',    label: 'Save Only' },
+                                { key: 'stage2_popup_receipt_only', label: 'Print Receipt Only' },
+                                { key: 'stage2_popup_kot_only',     label: 'Print KOT Only' },
+                                { key: 'stage2_popup_kot_receipt',  label: 'Print Receipt + KOT' }
+                              ].map(opt => (
+                                <FormControlLabel
+                                  key={opt.key}
+                                  control={
+                                    <Switch
+                                      size="small"
+                                      checked={Number(workflowDraft[opt.key]) === 1}
+                                      onChange={e => setWorkflowDraft(prev => ({ ...prev, [opt.key]: e.target.checked ? 1 : 0 }))}
+                                      color="primary"
+                                    />
+                                  }
+                                  label={<Typography variant="body2" sx={{ fontWeight: 600 }}>{opt.label}</Typography>}
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        </Grid>
+                      )}
+
+                      {/* Enable Stage 2 toggle */}
+                      <Grid size={12} sx={{ mt: 1 }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={Number(workflowDraft.enable_stage2_popup) === 1}
+                              onChange={e => setWorkflowDraft(prev => ({ ...prev, enable_stage2_popup: e.target.checked ? 1 : 0 }))}
+                              color="primary"
+                            />
+                          }
+                          label={
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>Enable Stage 2 (Payment Method Popup)</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                If ON, cashiers must choose a payment method to close checkout. If OFF, orders are completed immediately using Stage 1 action.
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {/* Card 8: Cashier Reports & WhatsApp Receipts */}
+                  <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 1, borderColor: 'divider', pb: 1, flexWrap: 'wrap', gap: 1 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        📲 Cashier Permissions & Customer WhatsApp Share
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        onClick={handleSavePermissionsSettings}
+                        disabled={savingPermissions}
+                        sx={{ fontWeight: 800, px: 2, py: 0.5, fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                      >
+                        {savingPermissions ? <CircularProgress size={16} color="inherit" /> : 'Save Settings'}
+                      </Button>
+                    </Box>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={permissionsDraft.allow_cashier_view_all_reports === 1}
+                              onChange={e => setPermissionsDraft({ ...permissionsDraft, allow_cashier_view_all_reports: e.target.checked ? 1 : 0 })}
+                              color="primary"
+                            />
+                          }
+                          label="Allow Cashiers to View Total Sales Reports"
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={permissionsDraft.enable_whatsapp_receipt === 1}
+                              onChange={e => setPermissionsDraft({ ...permissionsDraft, enable_whatsapp_receipt: e.target.checked ? 1 : 0 })}
+                              color="primary"
+                            />
+                          }
+                          label="Enable Customer WhatsApp Receipt Share"
+                        />
+                      </Grid>
+                      {permissionsDraft.enable_whatsapp_receipt === 1 && (
+                        <Grid size={12}>
+                          <TextField
+                            label="WhatsApp Business Phone"
+                            size="small"
+                            fullWidth
+                            value={permissionsDraft.whatsapp_business_phone || ''}
+                            onChange={e => setPermissionsDraft({ ...permissionsDraft, whatsapp_business_phone: e.target.value })}
+                            placeholder="e.g. 919876543210"
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+                  </Paper>
+
                 </Box>
               </Grid>
 
               {/* Live Side-by-Side Thermal Paper Preview Column */}
-              <Grid item xs={12} lg={5} xl={4}>
+              <Grid size={{ xs: 12, lg: 5, xl: 4 }}>
                 <Box
                   sx={{
                     position: 'sticky',
@@ -2163,73 +3604,401 @@ export default function AdminPanel({ token }) {
         )}
 
         {/* --- STAFF & CASHIERS SUB-TAB --- */}
-        {activeTab === 5 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
+        {activeTab === 7 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
             {/* Header Section */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, width: '100%' }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>Manage Restaurant Staff & Cashiers</Typography>
-                <Typography variant="caption" color="text.secondary">Create terminal login credentials for Cashiers, Managers, and Staff members.</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Manage Staff & Cashiers
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Create terminal login credentials for Cashiers, Managers, and Staff members.
+                </Typography>
               </Box>
-              <Button variant="contained" startIcon={<UserPlus size={16} />} onClick={handleOpenAddStaff} sx={{ fontWeight: 800, px: 2.5, py: 1 }}>
-                Add Cashier / Staff
+              <Button
+                variant="contained"
+                startIcon={<UserPlus size={14} />}
+                onClick={handleOpenAddStaff}
+                sx={{
+                  fontWeight: 800,
+                  px: { xs: 1.25, sm: 2.5 },
+                  py: { xs: 0.5, sm: 1 },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                Add Staff
               </Button>
             </Box>
 
-            {/* Staff Table */}
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5 }}>
-              <Table>
+            {/* Staff Table View - Visible on Mobile, Tablet & Desktop */}
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5, width: '100%', overflowX: 'auto', display: 'block' }}>
+              <Table size="small" sx={{ minWidth: 600 }}>
                 <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Staff Name</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Username / Login ID</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Email Address</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Account Status</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Staff Name</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Username / Login ID</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Email Address</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Account Status</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {staffUsers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                        No staff accounts found. Click "Add Cashier / Staff" to create your first terminal user.
+                        No staff users created yet.
                       </TableCell>
                     </TableRow>
                   ) : (
                     staffUsers.map(user => (
-                      <TableRow key={user.id}>
-                        <TableCell sx={{ fontWeight: 700 }}>{user.name}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main' }}>
-                          {user.username}
-                        </TableCell>
-                        <TableCell>{user.email || '-'}</TableCell>
+                      <TableRow key={user.id} hover>
+                        <TableCell sx={{ fontWeight: 800 }}>{user.name}</TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace' }}>{user.username}</TableCell>
+                        <TableCell color="text.secondary">{user.email || '-'}</TableCell>
                         <TableCell>
                           <Chip
                             label={(user.role || 'cashier').toUpperCase()}
-                            color={user.role === 'admin' ? 'secondary' : user.role === 'manager' ? 'info' : 'primary'}
                             size="small"
-                            sx={{ fontWeight: 800 }}
+                            color={user.role === 'admin' ? 'primary' : user.role === 'manager' ? 'secondary' : 'default'}
+                            sx={{ fontWeight: 700 }}
                           />
                         </TableCell>
                         <TableCell>
                           <Chip
-                            label={user.is_active ? 'ACTIVE' : 'INACTIVE'}
-                            color={user.is_active ? 'success' : 'default'}
+                            label={user.is_active === 1 ? 'Active' : 'Disabled'}
                             size="small"
-                            sx={{ fontWeight: 800 }}
+                            color={user.is_active === 1 ? 'success' : 'error'}
+                            variant="outlined"
+                            sx={{ fontWeight: 700 }}
                           />
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'right' }}>
+                        <TableCell align="right">
+                          <IconButton onClick={() => handleOpenEditStaff(user)} size="small" color="primary">
+                            <Edit2 size={16} />
+                          </IconButton>
+                          <IconButton onClick={() => handleDeleteStaff(user.id)} size="small" color="error">
+                            <Trash2 size={16} />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* Mobile Stacked Card View */}
+            <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1.5, width: '100%' }}>
+              {staffUsers.length === 0 ? (
+                <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
+                  No staff users created yet.
+                </Paper>
+              ) : (
+                staffUsers.map(user => (
+                  <Card key={user.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2.5, bgcolor: 'background.paper' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{user.name}</Typography>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>@{user.username}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                        <Chip
+                          label={(user.role || 'cashier').toUpperCase()}
+                          size="small"
+                          color={user.role === 'admin' ? 'primary' : user.role === 'manager' ? 'secondary' : 'default'}
+                          sx={{ fontWeight: 700, fontSize: '10px', height: 22 }}
+                        />
+                        <Chip
+                          label={user.is_active === 1 ? 'Active' : 'Disabled'}
+                          size="small"
+                          color={user.is_active === 1 ? 'success' : 'error'}
+                          variant="outlined"
+                          sx={{ fontWeight: 700, fontSize: '10px', height: 22 }}
+                        />
+                      </Box>
+                    </Box>
+                    {user.email && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        ✉️ {user.email}
+                      </Typography>
+                    )}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+                      <Button size="small" variant="outlined" startIcon={<Edit2 size={14} />} onClick={() => handleOpenEditStaff(user)} sx={{ fontSize: '0.75rem', py: 0.25 }}>
+                        Edit
+                      </Button>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteStaff(user.id)}>
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Box>
+                  </Card>
+                ))
+              )}
+            </Box>
+          </Box>
+        )}
+
+        {/* --- TAB 8: ORDER HISTORY --- */}
+        {activeTab === 8 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: 'clamp(1.05rem, 4vw, 1.25rem)', sm: '1.5rem' }, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  POS Order History
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Audit, reprint, and filter historical checkout bills.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<FileSpreadsheet size={15} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/orders/history/export-excel?preset=${historyPreset}&order_status=${historyStatus}&payment_mode=${historyPaymentMode}&cashier_id=${historyCashier}&date_from=${historyDateFrom}&date_to=${historyDateTo}&search=${encodeURIComponent(historySearch)}`, `order_history_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                      notify.success('Order History Excel report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Order History Excel report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Export Excel (.xlsx)
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<Download size={14} />}
+                  onClick={async () => {
+                    try {
+                      await downloadFile(`/api/orders/history/export-csv?preset=${historyPreset}&order_status=${historyStatus}&payment_mode=${historyPaymentMode}&cashier_id=${historyCashier}&date_from=${historyDateFrom}&date_to=${historyDateTo}&search=${encodeURIComponent(historySearch)}`, `order_history_${new Date().toISOString().slice(0, 10)}.csv`);
+                      notify.success('Order History CSV report downloaded.', 'Export Complete');
+                    } catch (err) {
+                      notify.error(err.message || 'Failed to download Order History CSV report.', 'Export Error');
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1, sm: 1.5 },
+                    py: { xs: 0.5, sm: 0.8 },
+                    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  CSV
+                </Button>
+              </Box>
+            </Box>
+
+            {/* Filter Panel & Standardized Date Range */}
+            <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 2.5, bgcolor: 'background.paper', width: '100%' }}>
+              <Grid container spacing={{ xs: 1, sm: 2 }} sx={{ alignItems: 'center' }}>
+                {/* Reusable Date Range Picker */}
+                <Grid size={{ xs: 12 }}>
+                  <DateRangePicker
+                    preset={historyPreset}
+                    onPresetChange={(newP) => { setHistoryPreset(newP); setHistoryPage(0); }}
+                    dateFrom={historyDateFrom}
+                    onDateFromChange={(newF) => { setHistoryDateFrom(newF); setHistoryPage(0); }}
+                    dateTo={historyDateTo}
+                    onDateToChange={(newT) => { setHistoryDateTo(newT); setHistoryPage(0); }}
+                    showAllTimeOption={true}
+                  />
+                </Grid>
+
+                {/* Search Bar */}
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search Order #, Customer, Item..."
+                    value={historySearch}
+                    onChange={e => { setHistorySearch(e.target.value); setHistoryPage(0); }}
+                  />
+                </Grid>
+
+                {/* Cashier Dropdown */}
+                <Grid size={{ xs: 6, sm: 2.4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Cashier</InputLabel>
+                    <Select
+                      value={historyCashier}
+                      label="Cashier"
+                      onChange={e => { setHistoryCashier(e.target.value); setHistoryPage(0); }}
+                    >
+                      <MenuItem value="all">All Staff</MenuItem>
+                      {staffUsers.map(u => <MenuItem key={u.id} value={u.id}>{u.name}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Payment Mode Dropdown */}
+                <Grid size={{ xs: 6, sm: 2.4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Payment</InputLabel>
+                    <Select
+                      value={historyPaymentMode}
+                      label="Payment"
+                      onChange={e => { setHistoryPaymentMode(e.target.value); setHistoryPage(0); }}
+                    >
+                      <MenuItem value="all">All Payments</MenuItem>
+                      <MenuItem value="cash">Cash</MenuItem>
+                      <MenuItem value="upi">UPI Scan</MenuItem>
+                      <MenuItem value="card">Credit Card</MenuItem>
+                      <MenuItem value="wallet">Wallet</MenuItem>
+                      <MenuItem value="split">Split Bill</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Status Dropdown */}
+                <Grid size={{ xs: 6, sm: 1.6 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={historyStatus}
+                      label="Status"
+                      onChange={e => { setHistoryStatus(e.target.value); setHistoryPage(0); }}
+                    >
+                      <MenuItem value="all">All Status</MenuItem>
+                      <MenuItem value="completed">Completed</MenuItem>
+                      <MenuItem value="pending">Pending (Held)</MenuItem>
+                      <MenuItem value="cancelled">Cancelled</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Reset Button */}
+                <Grid size={{ xs: 6, sm: 1.6 }}>
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    fullWidth
+                    size="small"
+                    onClick={() => {
+                      setHistoryPreset('all');
+                      setHistorySearch('');
+                      setHistoryCashier('all');
+                      setHistoryPaymentMode('all');
+                      setHistoryStatus('all');
+                      setHistoryDateFrom('');
+                      setHistoryDateTo('');
+                      setHistoryPage(0);
+                    }}
+                    sx={{ fontWeight: 'bold', minHeight: 38 }}
+                  >
+                    Reset
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Orders Table View — Desktop/Tablet (md+) */}
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5, width: '100%', overflowX: 'auto', display: { xs: 'none', md: 'block' } }}>
+              <Table size="small" sx={{ minWidth: 750 }}>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Order #</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Cashier</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Date / Time</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Customer Info</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Subtotal</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Discount</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Tax</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Net Paid</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Payment</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {historyOrders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} align="center" sx={{ py: 4, fontWeight: 700, color: 'text.secondary' }}>
+                        No orders match filters in retention window.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    historyOrders.map(order => (
+                      <TableRow key={order.id} hover>
+                        <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{order.unique_order_number}</TableCell>
+                        <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{order.cashier_name}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{new Date(order.created_at).toLocaleString()}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {order.customer_name ? (
+                            <Box sx={{ fontSize: '12px' }}>
+                              <b>{order.customer_name}</b> <br />
+                              <span style={{ color: '#64748b' }}>{order.customer_phone}</span>
+                            </Box>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Rs. {parseFloat(order.subtotal).toFixed(2)}</TableCell>
+                        <TableCell sx={{ color: 'warning.main', fontWeight: 600, whiteSpace: 'nowrap' }}>Rs. {parseFloat(order.discount_amount).toFixed(2)}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>Rs. {parseFloat(order.tax_amount).toFixed(2)}</TableCell>
+                        <TableCell sx={{ color: 'primary.main', fontWeight: 800, whiteSpace: 'nowrap' }}>Rs. {parseFloat(order.total_amount).toFixed(2)}</TableCell>
+                        <TableCell sx={{ textTransform: 'uppercase', fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{order.payment_mode}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Chip
+                            label={order.order_status}
+                            size="small"
+                            color={order.order_status === 'completed' ? 'success' : order.order_status === 'cancelled' ? 'error' : 'warning'}
+                            sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                            <Tooltip title="Edit Staff Credentials">
-                              <IconButton size="small" color="primary" onClick={() => handleOpenEditStaff(user)}>
-                                <Edit2 size={16} />
-                              </IconButton>
+                            <Tooltip title="View Order Bill Details">
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={async () => {
+                                  try {
+                                    const res = await apiFetch(`/api/orders/${order.id}`);
+                                    if (res.ok) {
+                                      setSelectedHistoryOrder(await res.json());
+                                      setHistoryOrderDetailOpen(true);
+                                    }
+                                  } catch (err) {
+                                    notify.error('Failed to load order details.', 'Error');
+                                  }
+                                }}
+                                sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}
+                              >
+                                View
+                              </Button>
                             </Tooltip>
-                            <Tooltip title="Delete Staff Account">
-                              <IconButton size="small" color="error" onClick={() => handleDeleteStaff(user)}>
-                                <Trash2 size={16} />
+                            <Tooltip title="Print Receipt Duplicate">
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                onClick={async () => {
+                                  try {
+                                    const res = await apiFetch(`/api/orders/${order.id}/reprint`, { method: 'POST' });
+                                    if (res.ok) {
+                                      notify.success('Receipt duplicate enqueued to thermal printer.', 'Reprint Success');
+                                    } else {
+                                      const err = await res.json();
+                                      notify.error(err.message || 'Reprint failed.', 'Reprint Error');
+                                    }
+                                  } catch (err) {
+                                    notify.error('Failed to dispatch reprint.', 'Error');
+                                  }
+                                }}
+                              >
+                                <Printer size={16} />
                               </IconButton>
                             </Tooltip>
                           </Box>
@@ -2240,6 +4009,132 @@ export default function AdminPanel({ token }) {
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {/* Orders Mobile Card View — xs/sm only */}
+            <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1.25 }}>
+              {loading ? (
+                <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : historyOrders.length === 0 ? (
+                <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', color: 'text.secondary', fontWeight: 600, borderRadius: 2.5 }}>
+                  No orders match filters in retention window.
+                </Paper>
+              ) : (
+                historyOrders.map(order => (
+                  <Card key={order.id} variant="outlined" sx={{ borderRadius: 2.5, bgcolor: 'background.paper', overflow: 'hidden' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      {/* Row 1: Order # + Amount + Status */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.75 }}>
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                            #{order.unique_order_number}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            🕒 {new Date(order.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </Typography>
+                          {order.cashier_name && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              👤 {order.cashier_name}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Typography variant="subtitle2" color="primary.main" sx={{ fontWeight: 800, fontSize: '1rem' }}>
+                            Rs. {parseFloat(order.total_amount).toFixed(2)}
+                          </Typography>
+                          <Chip
+                            label={order.order_status}
+                            size="small"
+                            color={order.order_status === 'completed' ? 'success' : order.order_status === 'cancelled' ? 'error' : 'warning'}
+                            sx={{ fontWeight: 700, textTransform: 'capitalize', fontSize: '10px', height: 20, mt: 0.25 }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {/* Row 2: Breakdown row */}
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 0.75, fontSize: '0.75rem', color: 'text.secondary' }}>
+                        <span>Sub: <b>Rs. {parseFloat(order.subtotal).toFixed(2)}</b></span>
+                        {parseFloat(order.discount_amount) > 0 && (
+                          <span style={{ color: '#f59e0b' }}>Disc: <b>-Rs. {parseFloat(order.discount_amount).toFixed(2)}</b></span>
+                        )}
+                        <span>Tax: <b>Rs. {parseFloat(order.tax_amount).toFixed(2)}</b></span>
+                      </Box>
+
+                      {/* Row 3: Customer + Payment + Actions */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 0.75, borderTop: 1, borderColor: 'divider' }}>
+                        <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', minWidth: 0 }}>
+                          {order.customer_name ? (
+                            <span>📋 <b>{order.customer_name}</b>{order.customer_phone ? ` (${order.customer_phone})` : ''}</span>
+                          ) : (
+                            <span style={{ textTransform: 'uppercase', fontWeight: 700 }}>💳 {order.payment_mode}</span>
+                          )}
+                          {order.customer_name && (
+                            <span style={{ marginLeft: 8, textTransform: 'uppercase', fontWeight: 700 }}>| {order.payment_mode}</span>
+                          )}
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={async () => {
+                              try {
+                                const res = await apiFetch(`/api/orders/${order.id}`);
+                                if (res.ok) {
+                                  setSelectedHistoryOrder(await res.json());
+                                  setHistoryOrderDetailOpen(true);
+                                }
+                              } catch (err) {
+                                notify.error('Failed to load order details.', 'Error');
+                              }
+                            }}
+                            sx={{ fontWeight: 800, fontSize: '0.7rem', px: 1.25, py: 0.25 }}
+                          >
+                            View
+                          </Button>
+                          <IconButton
+                            size="small"
+                            color="warning"
+                            title="Reprint Receipt"
+                            onClick={async () => {
+                              try {
+                                const res = await apiFetch(`/api/orders/${order.id}/reprint`, { method: 'POST' });
+                                if (res.ok) {
+                                  notify.success('Receipt duplicate enqueued.', 'Reprint Success');
+                                } else {
+                                  const err = await res.json();
+                                  notify.error(err.message || 'Reprint failed.', 'Reprint Error');
+                                }
+                              } catch (err) {
+                                notify.error('Failed to dispatch reprint.', 'Error');
+                              }
+                            }}
+                          >
+                            <Printer size={15} />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            {/* Pagination */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <TablePagination
+                component="div"
+                count={historyOrders.length < historyLimit && historyPage === 0 ? historyOrders.length : 1000} // estimation for large datasets
+                page={historyPage}
+                onPageChange={(e, newPage) => setHistoryPage(newPage)}
+                rowsPerPage={historyLimit}
+                onRowsPerPageChange={e => {
+                  setHistoryLimit(parseInt(e.target.value, 10));
+                  setHistoryPage(0);
+                }}
+                rowsPerPageOptions={[10, 20, 50, 100]}
+              />
+            </Box>
           </Box>
         )}
 
@@ -2262,10 +4157,10 @@ export default function AdminPanel({ token }) {
               <>
                 <TextField label="Item Name" size="small" fullWidth value={menuName} onChange={e => setMenuName(e.target.value)} required />
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <TextField label="Price (INR)" type="number" size="small" fullWidth value={menuPrice} onChange={e => setMenuPrice(e.target.value)} required />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={menuCategoryId} onChange={e => setMenuCategoryId(e.target.value)}>
                       {categories.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
                     </Select>
@@ -2273,13 +4168,13 @@ export default function AdminPanel({ token }) {
                 </Grid>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={menuVeg} onChange={e => setMenuVeg(e.target.value)}>
                       <MenuItem value="1">🟢 Veg</MenuItem>
                       <MenuItem value="0">🔴 Non-Veg</MenuItem>
                     </Select>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <TextField label="SKU / Barcode" size="small" fullWidth value={menuSku} onChange={e => setMenuSku(e.target.value)} />
                   </Grid>
                 </Grid>
@@ -2342,7 +4237,7 @@ export default function AdminPanel({ token }) {
                 <TextField label="Port" size="small" fullWidth value={printerPort} onChange={e => setPrinterPort(e.target.value)} required placeholder="9100" />
                 
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={printerType} onChange={e => setPrinterType(e.target.value)}>
                       <MenuItem value="lan">LAN / Network (TCP)</MenuItem>
                       <MenuItem value="usb">USB</MenuItem>
@@ -2350,7 +4245,7 @@ export default function AdminPanel({ token }) {
                       <MenuItem value="network">Network Socket</MenuItem>
                     </Select>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={printerWidth} onChange={e => setPrinterWidth(e.target.value)}>
                       <MenuItem value="80">80mm Thermal</MenuItem>
                       <MenuItem value="58">58mm Thermal</MenuItem>
@@ -2378,13 +4273,13 @@ export default function AdminPanel({ token }) {
                 </FormControl>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={printerAutoCut} onChange={e => setPrinterAutoCut(e.target.value)}>
                       <MenuItem value="1">✂️ Auto-Cutter ON</MenuItem>
                       <MenuItem value="0">Disabled</MenuItem>
                     </Select>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Select size="small" fullWidth value={printerCashDrawer} onChange={e => setPrinterCashDrawer(e.target.value)}>
                       <MenuItem value="1">💵 Cash Drawer Pulse ON</MenuItem>
                       <MenuItem value="0">Disabled</MenuItem>
@@ -2507,6 +4402,246 @@ export default function AdminPanel({ token }) {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* HISTORY ORDER DETAIL DIALOG */}
+      <Dialog
+        open={historyOrderDetailOpen}
+        onClose={() => setHistoryOrderDetailOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '16px', p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          Order details: {selectedHistoryOrder?.order?.unique_order_number}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          {selectedHistoryOrder && (
+            <>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', pb: 1, fontSize: 13 }}>
+                <Box>Cashier: <b>{selectedHistoryOrder.order.cashier_name}</b></Box>
+                <Box>Date: <b>{new Date(selectedHistoryOrder.order.created_at).toLocaleString()}</b></Box>
+                <Box>Payment: <b style={{ textTransform: 'uppercase' }}>{selectedHistoryOrder.order.payment_mode}</b></Box>
+                <Box>Status: <b>{selectedHistoryOrder.order.order_status.toUpperCase()}</b></Box>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Items List:</Typography>
+                {selectedHistoryOrder.items.map(it => (
+                  <Box key={it.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, fontSize: 13 }}>
+                    <Typography variant="body2">{it.name} x {it.quantity}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Rs. {(parseFloat(it.price) * it.quantity).toFixed(2)}</Typography>
+                  </Box>
+                ))}
+              </Box>
+              <Box sx={{ bgcolor: 'action.hover', p: 1.5, borderRadius: 2, mt: 1, fontSize: 13 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <span>Subtotal</span>
+                  <b>Rs. {parseFloat(selectedHistoryOrder.order.subtotal).toFixed(2)}</b>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <span>GST Tax</span>
+                  <b>Rs. {parseFloat(selectedHistoryOrder.order.tax_amount).toFixed(2)}</b>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, color: 'warning.main' }}>
+                  <span>Discount ({selectedHistoryOrder.order.discount_type === 'percentage' ? `${selectedHistoryOrder.order.discount_value}%` : 'Amt'})</span>
+                  <b>-Rs. {parseFloat(selectedHistoryOrder.order.discount_amount).toFixed(2)}</b>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1, borderTop: '1px dashed', borderColor: 'divider', color: 'primary.main', fontWeight: 'bold' }}>
+                  <span>Total Amount Paid</span>
+                  <b>Rs. {parseFloat(selectedHistoryOrder.order.total_amount).toFixed(2)}</b>
+                </Box>
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHistoryOrderDetailOpen(false)} variant="contained">Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- ITEM SALES HISTORY MODAL --- */}
+      <Dialog open={itemHistoryModalOpen} onClose={() => setItemHistoryModalOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
+          Sales History: {selectedReportItem?.name}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {loadingItemHistory ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : itemHistoryData.length === 0 ? (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              No sales transaction history found for this item in the selected period.
+            </Typography>
+          ) : (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>Order #</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Cashier</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Payment</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Qty</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Unit Price</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Item Total</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Date & Time</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {itemHistoryData.map((order, i) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontWeight: 700, fontFamily: 'monospace' }}>{order.unique_order_number}</TableCell>
+                      <TableCell>{order.cashier_name || 'Cashier'}</TableCell>
+                      <TableCell sx={{ textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 700 }}>{order.payment_mode}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800, color: 'primary.main' }}>{order.quantity}</TableCell>
+                      <TableCell align="right">Rs. {parseFloat(order.price || 0).toFixed(2)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800 }}>Rs. {parseFloat(order.total_item_amount || 0).toFixed(2)}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                        {order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setItemHistoryModalOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- ADJUST STOCK MODAL --- */}
+      <Dialog open={adjustStockModalOpen} onClose={() => setAdjustStockModalOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
+          Adjust Stock: {selectedStockItem?.name}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2.5 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Adjustment Action</InputLabel>
+            <Select
+              value={adjustmentType}
+              label="Adjustment Action"
+              onChange={e => setAdjustmentType(e.target.value)}
+            >
+              <MenuItem value="add">➕ Add Stock (+ Quantity)</MenuItem>
+              <MenuItem value="reduce">➖ Reduce Stock (- Quantity)</MenuItem>
+              <MenuItem value="set">🎯 Set Exact Stock (= Quantity)</MenuItem>
+            </Select>
+          </FormControl>
+
+          <Grid container spacing={1.5}>
+            <Grid size={7}>
+              <TextField
+                label="Quantity"
+                type="number"
+                size="small"
+                fullWidth
+                value={adjustQuantity}
+                onChange={e => setAdjustQuantity(e.target.value)}
+              />
+            </Grid>
+            <Grid size={5}>
+              <TextField
+                label="Unit"
+                size="small"
+                fullWidth
+                placeholder="pcs, kg, litre..."
+                value={adjustUnit}
+                onChange={e => setAdjustUnit(e.target.value)}
+              />
+            </Grid>
+          </Grid>
+
+          <TextField
+            label="Low Stock Alert Threshold"
+            type="number"
+            size="small"
+            fullWidth
+            value={adjustThreshold}
+            onChange={e => setAdjustThreshold(e.target.value)}
+            helperText="Notify when current stock falls below this number."
+          />
+
+          <TextField
+            label="Reason / Notes"
+            size="small"
+            fullWidth
+            placeholder="e.g. Restock shipment, Damaged items, Audit..."
+            value={adjustReason}
+            onChange={e => setAdjustReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setAdjustStockModalOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveStockAdjustment} disabled={savingStockAdjust} sx={{ fontWeight: 800 }}>
+            {savingStockAdjust ? 'Saving...' : 'Save Stock Adjustment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- STOCK AUDIT LOG MODAL --- */}
+      <Dialog open={stockLogsModalOpen} onClose={() => setStockLogsModalOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
+          Stock Adjustment Audit Trail {selectedStockLogItem ? `: ${selectedStockLogItem.name}` : ''}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {loadingStockLogs ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : stockLogsData.length === 0 ? (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              No stock adjustment logs recorded yet.
+            </Typography>
+          ) : (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>Item Name</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Action</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Change Qty</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Stock Transition</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Reason / Ref</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>User</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Timestamp</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {stockLogsData.map((log, idx) => (
+                    <TableRow key={idx} hover>
+                      <TableCell sx={{ fontWeight: 700 }}>{log.item_name}</TableCell>
+                      <TableCell>
+                        {log.adjustment_type === 'add' ? (
+                          <Chip label="➕ Add" color="success" size="small" sx={{ fontWeight: 700 }} />
+                        ) : log.adjustment_type === 'reduce' ? (
+                          <Chip label="➖ Reduce" color="warning" size="small" sx={{ fontWeight: 700 }} />
+                        ) : log.adjustment_type === 'set' ? (
+                          <Chip label="🎯 Set" color="info" size="small" sx={{ fontWeight: 700 }} />
+                        ) : (
+                          <Chip label="🛒 Sale" color="default" size="small" sx={{ fontWeight: 700 }} />
+                        )}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800 }}>{log.quantity}</TableCell>
+                      <TableCell align="right" sx={{ fontSize: '0.85rem' }}>
+                        {log.previous_stock} ➔ <strong>{log.new_stock}</strong>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{log.reason || '-'}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{log.user_name || 'System'}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                        {log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setStockLogsModalOpen(false)}>Close</Button>
+        </DialogActions>
       </Dialog>
     </Container>
   </Box>

@@ -39,6 +39,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+/**
+ * Clear local credentials and notify app of session termination
+ */
+export function handleSessionExpired() {
+  localStorage.removeItem('pos_token');
+  localStorage.removeItem('pos_refresh_token');
+  localStorage.removeItem('pos_user');
+  window.dispatchEvent(new CustomEvent('auth_session_expired'));
+}
+
 export async function apiFetch(url, options = {}) {
   const fullUrl = getApiUrl(url);
   const headers = options.headers || {};
@@ -60,15 +70,29 @@ export async function apiFetch(url, options = {}) {
 
   let response = await fetch(fullUrl, fetchOptions);
 
-  // Handle 401 Unauthorized (Expired Access Token)
-  if (response.status === 401) {
+  // Exclude auth-specific endpoints to prevent infinite refresh loops
+  const isAuthEndpoint = fullUrl.includes('/api/auth/login') ||
+                         fullUrl.includes('/api/auth/refresh') ||
+                         fullUrl.includes('/api/auth/verify-otp');
+
+  // Handle 401 Unauthorized (Expired or Invalid Access Token)
+  if (response.status === 401 && !isAuthEndpoint) {
     const refreshToken = localStorage.getItem('pos_refresh_token');
 
-    // If no refresh token is present, we cannot refresh automatically
+    // If no refresh token is present, clear session and return 401 response
     if (!refreshToken) {
+      handleSessionExpired();
       return response;
     }
 
+    // Check if another concurrent request or tab already refreshed the token
+    const latestToken = localStorage.getItem('pos_token');
+    if (latestToken && latestToken !== token) {
+      fetchOptions.headers['Authorization'] = `Bearer ${latestToken}`;
+      return fetch(fullUrl, fetchOptions);
+    }
+
+    // If a refresh is already in progress in this tab, queue this request
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
@@ -88,39 +112,86 @@ export async function apiFetch(url, options = {}) {
       const refreshRes = await fetch(getApiUrl('/api/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: refreshToken })
+        body: JSON.stringify({ refreshToken, token: refreshToken })
       });
 
       if (refreshRes.ok) {
         const data = await refreshRes.json();
         const newAccessToken = data.accessToken;
+        const newRefreshToken = data.refreshToken;
 
-        localStorage.setItem('pos_token', newAccessToken);
-        fetchOptions.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        if (newAccessToken) {
+          localStorage.setItem('pos_token', newAccessToken);
+        }
+        if (newRefreshToken) {
+          localStorage.setItem('pos_refresh_token', newRefreshToken);
+        }
+        if (data.user) {
+          localStorage.setItem('pos_user', JSON.stringify(data.user));
+        }
 
-        // Notify subscribers in queue
+        // Notify all queued subscribers
         processQueue(null, newAccessToken);
         isRefreshing = false;
 
-        // Transparently retry the original request with new token
+        // Dispatch token refresh event
+        window.dispatchEvent(new CustomEvent('auth_token_refreshed', { detail: { token: newAccessToken, user: data.user } }));
+
+        // Transparently retry the original failed request
+        fetchOptions.headers['Authorization'] = `Bearer ${newAccessToken}`;
         response = await fetch(fullUrl, fetchOptions);
       } else {
-        // Refresh token expired or revoked - clear storage
+        // Refresh token expired or invalid
         processQueue(new Error('Refresh token expired'), null);
         isRefreshing = false;
-        
-        localStorage.removeItem('pos_token');
-        localStorage.removeItem('pos_refresh_token');
-        localStorage.removeItem('pos_user');
-
-        // Reload window to return cleanly to Login screen
-        window.location.reload();
+        handleSessionExpired();
       }
     } catch (refreshErr) {
       processQueue(refreshErr, null);
       isRefreshing = false;
+      handleSessionExpired();
     }
   }
 
   return response;
+}
+
+/**
+ * Triggers an authenticated file download using apiFetch (with automatic JWT token refresh).
+ */
+export async function downloadFile(endpoint, defaultFilename = 'export.xlsx') {
+  try {
+    const response = await apiFetch(endpoint);
+    if (!response.ok) {
+      let errMessage = 'Failed to download file.';
+      try {
+        const errJson = await response.json();
+        errMessage = errJson.error || errMessage;
+      } catch (e) {}
+      throw new Error(errMessage);
+    }
+
+    let filename = defaultFilename;
+    const disposition = response.headers.get('content-disposition');
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+    return true;
+  } catch (err) {
+    console.error('File download error:', err);
+    throw err;
+  }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Grid, Card, CardMedia, CardContent, Typography, TextField, Button, Chip, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, IconButton, CircularProgress, InputAdornment, Tooltip } from '@mui/material';
+import { Box, Grid, Card, CardMedia, CardContent, Typography, TextField, Button, Chip, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, IconButton, CircularProgress, InputAdornment, Tooltip, Select, MenuItem, Divider, Paper } from '@mui/material';
 import { Search, ShoppingCart, CreditCard, RefreshCw, Printer, AlertCircle, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
@@ -61,13 +61,22 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
   // Cart State
   const [cart, setCart] = useState([]);
-  const [discount, setDiscount] = useState(0);
+  const [discountType, setDiscountType] = useState('amount'); // 'amount' or 'percentage'
+  const [discountValue, setDiscountValue] = useState(0);
   const [orderNotes, setOrderNotes] = useState('');
   const [tableOrTakeaway, setTableOrTakeaway] = useState('Takeaway');
+  
+  // Settings & Customer state
+  const [receiptSettings, setReceiptSettings] = useState(null);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
 
   // Checkout Popups State
-  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState('cash');
+  const [showStage1Dialog, setShowStage1Dialog] = useState(false);
+  const [showStage2PaymentDialog, setShowStage2PaymentDialog] = useState(false);
+  const [createdOrderId, setCreatedOrderId] = useState(null);
+  const [stage2SelectedPaymentMode, setStage2SelectedPaymentMode] = useState('cash');
+  const [showStage2PrintDialog, setShowStage2PrintDialog] = useState(false);
   const [lastOrderDetails, setLastOrderDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -201,6 +210,12 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         setMenuItems([]);
         setFilteredItems([]);
       }
+
+      // Fetch dynamic settings (includes GST and printing configurations)
+      const settingsRes = await apiFetch('/api/settings/receipt');
+      if (settingsRes.ok) {
+        setReceiptSettings(await settingsRes.json());
+      }
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setCategories([]);
@@ -270,50 +285,130 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
     });
   };
 
-  // Math totals calculation
+  // Math totals calculation (GST Included vs Excluded and Discount type/value)
   const calculateTotals = () => {
+    const gstMode = receiptSettings?.gst_mode || 'excluded';
+    
     let subtotal = 0;
     let tax_amount = 0;
+    let total_before_discount = 0;
+
     cart.forEach(item => {
       const itemPrice = isNaN(parseFloat(item.price)) ? 0 : parseFloat(item.price);
       const itemGst = isNaN(parseFloat(item.gst_rate)) ? 0 : parseFloat(item.gst_rate);
-      const itemCost = itemPrice * (item.quantity || 1);
-      subtotal += itemCost;
-      tax_amount += itemCost * (itemGst / 100);
+      const qty = item.quantity || 1;
+
+      if (gstMode === 'included') {
+        // Price already includes tax
+        const itemTotal = itemPrice * qty;
+        const basePrice = itemPrice / (1 + (itemGst / 100));
+        const itemTax = itemTotal - (basePrice * qty);
+
+        subtotal += basePrice * qty;
+        tax_amount += itemTax;
+        total_before_discount += itemTotal;
+      } else {
+        // Tax added during billing
+        const basePrice = itemPrice * qty;
+        const itemTax = basePrice * (itemGst / 100);
+
+        subtotal += basePrice;
+        tax_amount += itemTax;
+        total_before_discount += basePrice + itemTax;
+      }
     });
-    const discount_amount = isNaN(parseFloat(discount)) ? 0 : parseFloat(discount);
-    const total_amount = Math.max(0, subtotal + tax_amount - discount_amount);
+
+    let discount_amount = 0;
+    const val = isNaN(parseFloat(discountValue)) ? 0 : parseFloat(discountValue);
+    if (discountType === 'percentage') {
+      discount_amount = total_before_discount * (val / 100);
+    } else {
+      discount_amount = val;
+    }
+
+    // Cap discount
+    discount_amount = Math.min(discount_amount, total_before_discount);
+    const total_amount = Math.max(0, total_before_discount - discount_amount);
+
     return {
       subtotal: parseFloat((subtotal || 0).toFixed(2)),
       tax_amount: parseFloat((tax_amount || 0).toFixed(2)),
       discount_amount: parseFloat((discount_amount || 0).toFixed(2)),
-      total_amount: parseFloat((total_amount || 0).toFixed(2))
+      total_amount: parseFloat((total_amount || 0).toFixed(2)),
+      total_before_discount: parseFloat((total_before_discount || 0).toFixed(2))
     };
   };
 
   const totals = calculateTotals();
 
-  // Click 2: Place Order -> Trigger confirmation dialog
+  // Click 2: Place Order -> Trigger Stage 1 confirmation
   const handlePlaceOrderClick = () => {
     if (cart.length === 0) return;
-    setCheckoutModalOpen(true);
+    
+    const stage1Mode = receiptSettings?.print_stage1_mode || 'save_only';
+    if (stage1Mode === 'show_popup') {
+      setShowStage1Dialog(true);
+    } else {
+      executeStage1Checkout(stage1Mode);
+    }
   };
 
-  // Click 3: Confirm Checkout Payment Mode
-  const handlePaymentSelect = async (mode) => {
+  // Click 3: Confirm Checkout Payment Mode / Hold Order (Handles show_popup printing logic)
+  const executeStage1Checkout = async (action) => {
     setLoading(true);
     setError('');
+
+    const enableStage2 = receiptSettings?.enable_stage2_popup !== 0;
+
+    let status = 'pending';
+    let paymentMode = 'pending';
+    let printActions = [];
+
+    if (enableStage2) {
+      status = 'pending';
+      paymentMode = 'pending';
+      if (action === 'print_kot_only' || action === 'print_kot_receipt') {
+        printActions.push('KOT');
+      }
+      if (action === 'print_receipt_only' || action === 'print_kot_receipt') {
+        printActions.push('RECEIPT');
+      }
+    } else {
+      if (action === 'print_receipt_only') {
+        status = 'completed';
+        paymentMode = 'cash';
+        printActions = ['RECEIPT'];
+      } else if (action === 'print_kot_receipt') {
+        status = 'completed';
+        paymentMode = 'cash';
+        printActions = ['KOT', 'RECEIPT'];
+      } else if (action === 'print_kot_only') {
+        status = 'pending';
+        paymentMode = 'pending';
+        printActions = ['KOT'];
+      } else {
+        status = 'pending';
+        paymentMode = 'pending';
+        printActions = [];
+      }
+    }
 
     try {
       const orderPayload = {
         items: cart,
-        payment_mode: mode,
+        payment_mode: paymentMode,
         subtotal: totals.subtotal,
         tax_amount: totals.tax_amount,
         discount_amount: totals.discount_amount,
         total_amount: totals.total_amount,
         table_number_or_takeaway: tableOrTakeaway,
-        notes: orderNotes
+        notes: orderNotes,
+        status: status,
+        discount_type: discountType,
+        discount_value: discountValue,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        print_actions: printActions
       };
 
       const response = await apiFetch('/api/orders', {
@@ -327,16 +422,105 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       }
 
       setLastOrderDetails(data);
-      setCart([]);
-      setDiscount(0);
-      setOrderNotes('');
-      setCheckoutModalOpen(false);
-      setMobileTab(0);
+      setShowStage1Dialog(false);
+
+      if (enableStage2) {
+        setCreatedOrderId(data.orderId);
+        setShowStage2PaymentDialog(true);
+      } else {
+        setCart([]);
+        setDiscountValue(0);
+        setOrderNotes('');
+        setCustomerName('');
+        setCustomerPhone('');
+        setMobileTab(0);
+        
+        notify.success(
+          status === 'completed' 
+            ? 'Order completed and billed successfully.' 
+            : 'Order held/sent to kitchen successfully.', 
+          'Success',
+          1000
+        );
+        
+        if (receiptSettings?.enable_whatsapp_receipt && customerPhone) {
+          triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
+        }
+      }
     } catch (err) {
-      setError(err.message);
+      notify.error(err.message || 'Checkout failed.', 'Checkout Error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStage2PaymentSelect = (mode) => {
+    setStage2SelectedPaymentMode(mode);
+    
+    const stage2Mode = receiptSettings?.print_stage2_mode || 'print_receipt_only';
+    if (stage2Mode === 'show_popup') {
+      setShowStage2PrintDialog(true);
+    } else {
+      executeStage2Complete(mode, stage2Mode);
+    }
+  };
+
+  const executeStage2Complete = async (mode, action) => {
+    if (!createdOrderId) return;
+    setLoading(true);
+    
+    let printActions = [];
+    if (action === 'print_receipt_only') {
+      printActions = ['RECEIPT'];
+    } else if (action === 'print_kot_receipt') {
+      printActions = ['KOT', 'RECEIPT'];
+    } else if (action === 'print_kot_only') {
+      printActions = ['KOT'];
+    } else {
+      printActions = [];
+    }
+
+    try {
+      const res = await apiFetch(`/api/orders/${createdOrderId}/status`, {
+        method: 'PUT',
+        body: {
+          status: 'completed',
+          payment_mode: mode,
+          print_actions: printActions
+        }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to finalize payment.');
+      }
+
+      notify.success('Payment collected and order completed!', 'Success', 1000);
+      
+      if (receiptSettings?.enable_whatsapp_receipt && customerPhone) {
+        triggerWhatsAppShare(lastOrderDetails?.orderNumber || 'ORDER', totals.total_amount, customerPhone);
+      }
+
+      setCart([]);
+      setDiscountValue(0);
+      setOrderNotes('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setCreatedOrderId(null);
+      setShowStage2PaymentDialog(false);
+      setShowStage2PrintDialog(false);
+      setMobileTab(0);
+    } catch (err) {
+      notify.error(err.message || 'Payment collection failed.', 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerWhatsAppShare = (orderNumber, total, phone) => {
+    const text = `Thanks for dining with us! Your order #${orderNumber} is confirmed. Total amount payable is Rs. ${total.toFixed(2)}.`;
+    const waUrl = `https://api.whatsapp.com/send?phone=91${phone.replace(/\D/g, '')}&text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank');
   };
 
   const triggerReprint = async () => {
@@ -389,6 +573,47 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
           </Box>
         ))}
 
+        {cart.length > 0 && (
+          <Paper variant="outlined" sx={{ p: 2, mt: 1, borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: 1.5, bgcolor: '#fafafa' }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', color: 'text.secondary' }}>
+              👤 Customer & Order Notes
+            </Typography>
+            <Divider />
+            
+            {receiptSettings?.enable_whatsapp_receipt === 1 && (
+              <>
+                <TextField
+                  label="Customer Phone (for WhatsApp Share)"
+                  size="small"
+                  placeholder="10 digit number"
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Customer Name"
+                  size="small"
+                  placeholder="Name"
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  fullWidth
+                />
+              </>
+            )}
+
+            <TextField
+              label="Order Notes / Kitchen Instructions"
+              size="small"
+              placeholder="e.g. Extra spicy, no onions"
+              value={orderNotes}
+              onChange={e => setOrderNotes(e.target.value)}
+              fullWidth
+              multiline
+              rows={2}
+            />
+          </Paper>
+        )}
+
         {cart.length === 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 2, color: 'text.secondary', pt: '10vh', pb: 4 }}>
             <ShoppingCart size={48} strokeWidth={1.5} color="#94a3b8" />
@@ -434,17 +659,34 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
             {/* Discount Row with Right-Aligned Rounded Input Field */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.4 }}>
-              <Typography variant="body2" sx={{ color: '#6B7280', fontSize: 'clamp(0.875rem, 1.2vw, 1rem)', fontWeight: 500 }}>
-                Discount
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" sx={{ color: '#6B7280', fontSize: 'clamp(0.875rem, 1.2vw, 1rem)', fontWeight: 500 }}>
+                  Discount
+                </Typography>
+                <Select
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value)}
+                  size="small"
+                  sx={{
+                    height: '28px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    borderRadius: '4px',
+                    '& .MuiSelect-select': { py: 0.5, px: 1 }
+                  }}
+                >
+                  <MenuItem value="amount">Rs.</MenuItem>
+                  <MenuItem value="percentage">%</MenuItem>
+                </Select>
+              </Box>
               <TextField
                 type="number"
                 size="small"
-                value={discount}
-                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value || 0)))}
+                value={discountValue}
+                onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value || 0)))}
                 slotProps={{
                   input: {
-                    startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { fontSize: '11px', fontWeight: 700, color: '#6B7280' } }}>Rs</InputAdornment>
+                    startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { fontSize: '11px', fontWeight: 700, color: '#6B7280' } }}>{discountType === 'amount' ? 'Rs' : '%'}</InputAdornment>
                   }
                 }}
                 sx={{
@@ -468,6 +710,17 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
                 }}
               />
             </Box>
+
+            {discountType === 'percentage' && discountValue > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.2 }}>
+                <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
+                  Customer Saves (₹)
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
+                  -Rs. {totals.discount_amount.toFixed(2)}
+                </Typography>
+              </Box>
+            )}
 
             {/* Horizontal Dashed Divider */}
             <Box sx={{ borderTop: '1px dashed #D1D5DB', my: 1 }} />
@@ -592,7 +845,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         ref={posContainerRef}
         sx={{
           flex: 1,
-          height: focusMode ? 'calc(100vh - 48px)' : { md: 'calc(100vh - 70px)' },
+          minHeight: 0,
           display: 'flex',
           overflow: 'hidden',
           width: '100%',
@@ -1142,99 +1395,129 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
         </Box>
       )}
 
-      {/* CONFIRMATION & PAYMENT MODAL */}
+      {/* STAGE 1 PRINT CHOICE DIALOG */}
       <Dialog
-        open={checkoutModalOpen}
-        onClose={() => setCheckoutModalOpen(false)}
+        open={showStage1Dialog}
+        onClose={() => setShowStage1Dialog(false)}
         maxWidth="xs"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            p: 0.5,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.18)'
-          }
+          sx: { borderRadius: '16px', p: 1 }
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.2rem', pt: 2.5, px: 3, pb: 1 }}>
-          Confirm Takeaway Checkout
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          🖨️ Select Stage 1 Action
         </DialogTitle>
-
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, px: 3, py: 1 }}>
-          {error && (
-            <Box sx={{ bgcolor: 'error.light', color: 'error.contrastText', p: 1.5, borderRadius: 2, fontWeight: 600 }}>
-              {error}
-            </Box>
-          )}
-
-          {/* Breakdown summary */}
-          <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2.5, fontSize: 13, border: 1, borderColor: 'divider' }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, borderBottom: 1, borderColor: 'divider', pb: 0.8, textTransform: 'uppercase', fontSize: '11px', color: 'text.secondary' }}>
-              Order items summary
-            </Typography>
-            {cart.map(item => (
-              <Box key={item.menu_item_id} sx={{ display: 'flex', justifyContent: 'space-between', my: 0.6 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{item.name} x {item.quantity}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 800 }}>Rs. {(item.price * item.quantity).toFixed(2)}</Typography>
-              </Box>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Select a print/save workflow action to confirm and place this order:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[
+              { id: 'save_only',         label: 'Save Only',           action: 'save_only',         flag: 'stage1_popup_save_only' },
+              { id: 'print_receipt_only',label: 'Print Receipt Only',   action: 'print_receipt_only',flag: 'stage1_popup_receipt_only' },
+              { id: 'print_kot_only',    label: 'Print KOT Only',       action: 'print_kot_only',    flag: 'stage1_popup_kot_only' },
+              { id: 'print_kot_receipt', label: 'Print Receipt + KOT',  action: 'print_kot_receipt', flag: 'stage1_popup_kot_receipt' }
+            ].filter(opt => Number(receiptSettings?.[opt.flag]) !== 0).map(opt => (
+              <Button
+                key={opt.id}
+                variant="outlined"
+                fullWidth
+                size="large"
+                disabled={loading}
+                onClick={() => executeStage1Checkout(opt.action)}
+                sx={{
+                  fontWeight: 800,
+                  py: 1.5,
+                  borderRadius: '10px',
+                  justifyContent: 'center',
+                  textTransform: 'none',
+                  '&:hover': {
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    borderColor: 'primary.main'
+                  }
+                }}
+              >
+                {opt.label}
+              </Button>
             ))}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed', borderColor: 'divider', pt: 1.2, mt: 1.2, fontWeight: 'bold' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Total Payable</Typography>
-              <Typography variant="subtitle2" color="primary.main" sx={{ fontWeight: 800, fontSize: '1.1rem' }}>
-                Rs. {totals.total_amount.toFixed(2)}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowStage1Dialog(false)} color="inherit" sx={{ fontWeight: 'bold' }}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* STAGE 2 PAYMENT METHOD POPUP */}
+      <Dialog
+        open={showStage2PaymentDialog}
+        onClose={() => {
+          setCart([]);
+          setDiscountValue(0);
+          setOrderNotes('');
+          setCustomerName('');
+          setCustomerPhone('');
+          setCreatedOrderId(null);
+          setShowStage2PaymentDialog(false);
+          setMobileTab(0);
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          💳 Collect Bill Payment (Stage 2)
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 1 }}>
+          <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: '8px', border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" color="text.secondary">Order Payable Amount</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main', mt: 0.5 }}>
+              Rs. {totals.total_amount.toFixed(2)}
+            </Typography>
+            {lastOrderDetails && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                Order Number: <b>{lastOrderDetails.orderNumber}</b>
               </Typography>
-            </Box>
+            )}
           </Box>
 
-          {/* Order Notes Field */}
-          <TextField
-            label="Order Notes / Customer Mobile"
-            placeholder="Special instructions or customer information"
-            value={orderNotes}
-            onChange={(e) => setOrderNotes(e.target.value)}
-            fullWidth
-            size="small"
-          />
+          <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 1 }}>
+            Choose Payment Method
+          </Typography>
 
-          {/* Payment Method Selector Heading */}
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>
-              Choose Payment Method
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Select a payment option to complete takeaway order.
-            </Typography>
-          </Box>
-          
-          {/* 2x2 Clean Payment Grid (1-Click Instant Payment Execution) */}
           <Box
             sx={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: 1.5,
-              width: '100%'
+              width: '100%',
+              mt: 0.5
             }}
           >
             {[
               { id: 'cash', label: 'Cash', icon: '💵', desc: 'Instant Cash' },
               { id: 'upi', label: 'UPI Scan', icon: '📱', desc: 'QR Code' },
               { id: 'card', label: 'Credit Card', icon: '💳', desc: 'POS Terminal' },
-              { id: 'split', label: 'Split Bill', icon: '⚖️', desc: 'Multi-Pay' }
+              { id: 'wallet', label: 'Wallet', icon: '👛', desc: 'Digital Wallet' },
+              { id: 'other', label: 'Other', icon: '⚙️', desc: 'Custom Pay' }
             ].map(method => (
               <Card
                 key={method.id}
                 variant="outlined"
-                onClick={() => handlePaymentSelect(method.id)}
+                onClick={() => handleStage2PaymentSelect(method.id)}
                 sx={{
                   cursor: 'pointer',
-                  minHeight: '96px',
-                  p: 1.5,
+                  minHeight: '80px',
+                  p: 1,
                   borderRadius: '12px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 0.5,
+                  gap: 0.3,
                   position: 'relative',
                   borderColor: 'divider',
                   borderWidth: 1,
@@ -1251,39 +1534,88 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
                   }
                 }}
               >
-                <span style={{ fontSize: 26 }}>{method.icon}</span>
-                <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary' }}>
+                <span style={{ fontSize: 20 }}>{method.icon}</span>
+                <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', fontSize: '12px' }}>
                   {method.label}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '10px' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '9px' }}>
                   {method.desc}
                 </Typography>
               </Card>
             ))}
           </Box>
         </DialogContent>
-
-        {/* Modal Footer with ONLY Cancel Button (Clicking payment method immediately saves & prints) */}
-        <DialogActions
-          sx={{
-            display: 'flex',
-            justify: 'flex-start',
-            alignItems: 'center',
-            pt: 2,
-            pb: 2.5,
-            px: 3,
-            borderTop: '1px solid',
-            borderColor: 'divider'
-          }}
-        >
+        <DialogActions>
           <Button
-            variant="outlined"
+            onClick={() => {
+              setCart([]);
+              setDiscountValue(0);
+              setOrderNotes('');
+              setCustomerName('');
+              setCustomerPhone('');
+              setCreatedOrderId(null);
+              setShowStage2PaymentDialog(false);
+              setMobileTab(0);
+            }}
             color="inherit"
-            onClick={() => setCheckoutModalOpen(false)}
-            sx={{ fontWeight: 700, px: 3 }}
+            sx={{ fontWeight: 'bold' }}
           >
-            Cancel (Go Back to Order)
+            Cancel
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* STAGE 2 PRINT CHOICE DIALOG */}
+      <Dialog
+        open={showStage2PrintDialog}
+        onClose={() => setShowStage2PrintDialog(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          🖨️ Select Stage 2 Action
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Select a print/save workflow action to complete payment and close checkout:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[
+              { id: 'save_only',         label: 'Save Only',          action: 'save_only',         flag: 'stage2_popup_save_only' },
+              { id: 'print_receipt_only',label: 'Print Receipt Only',  action: 'print_receipt_only',flag: 'stage2_popup_receipt_only' },
+              { id: 'print_kot_only',    label: 'Print KOT Only',      action: 'print_kot_only',    flag: 'stage2_popup_kot_only' },
+              { id: 'print_kot_receipt', label: 'Print Receipt + KOT', action: 'print_kot_receipt', flag: 'stage2_popup_kot_receipt' }
+            ].filter(opt => Number(receiptSettings?.[opt.flag]) !== 0).map(opt => (
+              <Button
+                key={opt.id}
+                variant="outlined"
+                fullWidth
+                size="large"
+                disabled={loading}
+                onClick={() => executeStage2Complete(stage2SelectedPaymentMode, opt.action)}
+                sx={{
+                  fontWeight: 800,
+                  py: 1.5,
+                  borderRadius: '10px',
+                  justifyContent: 'center',
+                  textTransform: 'none',
+                  '&:hover': {
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    borderColor: 'primary.main'
+                  }
+                }}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowStage2PrintDialog(false)} color="inherit" sx={{ fontWeight: 'bold' }}>Cancel</Button>
         </DialogActions>
       </Dialog>
     </Box>
