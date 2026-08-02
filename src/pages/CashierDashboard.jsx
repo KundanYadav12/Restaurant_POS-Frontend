@@ -119,6 +119,9 @@ export default function CashierDashboard({ user, token, onLogout }) {
   };
 
   const handleOpenPayDialog = (order) => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setSelectedOrder(order);
     setPaymentMode('cash');
     setPayDialogOpen(true);
@@ -537,7 +540,7 @@ export default function CashierDashboard({ user, token, onLogout }) {
       </Box>
 
       {/* COLLECT PAYMENT POPUP */}
-      <Dialog open={payDialogOpen} onClose={() => setPayDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={payDialogOpen} onClose={() => setPayDialogOpen(false)} disableRestoreFocus maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>
           Collect Bill Payment
         </DialogTitle>
@@ -584,6 +587,7 @@ export default function CashierDashboard({ user, token, onLogout }) {
       <Dialog
         open={showStage2Dialog}
         onClose={() => setShowStage2Dialog(false)}
+        disableRestoreFocus
         maxWidth="xs"
         fullWidth
         slotProps={{

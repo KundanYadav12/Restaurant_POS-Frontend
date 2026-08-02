@@ -4139,7 +4139,7 @@ export default function AdminPanel({ token }) {
         )}
 
       {/* --- CRUD FORM POPUP --- */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} disableRestoreFocus maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>
           {dialogType === 'add_menu' && 'Add Menu Item'}
           {dialogType === 'edit_menu' && 'Modify Menu Item'}
@@ -4325,7 +4325,7 @@ export default function AdminPanel({ token }) {
       </Dialog>
 
       {/* --- ADD / EDIT STAFF DIALOG --- */}
-      <Dialog open={staffDialogOpen} onClose={() => setStaffDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={staffDialogOpen} onClose={() => setStaffDialogOpen(false)} disableRestoreFocus maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>
           {selectedStaff ? 'Edit Staff User Credentials' : 'Add Cashier / Staff User'}
         </DialogTitle>
@@ -4408,6 +4408,7 @@ export default function AdminPanel({ token }) {
       <Dialog
         open={historyOrderDetailOpen}
         onClose={() => setHistoryOrderDetailOpen(false)}
+        disableRestoreFocus
         maxWidth="xs"
         fullWidth
         slotProps={{ paper: { sx: { borderRadius: '16px', p: 1 } } }}
@@ -4460,7 +4461,7 @@ export default function AdminPanel({ token }) {
       </Dialog>
 
       {/* --- ITEM SALES HISTORY MODAL --- */}
-      <Dialog open={itemHistoryModalOpen} onClose={() => setItemHistoryModalOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={itemHistoryModalOpen} onClose={() => setItemHistoryModalOpen(false)} disableRestoreFocus maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
           Sales History: {selectedReportItem?.name}
         </DialogTitle>
@@ -4512,7 +4513,7 @@ export default function AdminPanel({ token }) {
       </Dialog>
 
       {/* --- ADJUST STOCK MODAL --- */}
-      <Dialog open={adjustStockModalOpen} onClose={() => setAdjustStockModalOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={adjustStockModalOpen} onClose={() => setAdjustStockModalOpen(false)} disableRestoreFocus maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
           Adjust Stock: {selectedStockItem?.name}
         </DialogTitle>
@@ -4581,7 +4582,7 @@ export default function AdminPanel({ token }) {
       </Dialog>
 
       {/* --- STOCK AUDIT LOG MODAL --- */}
-      <Dialog open={stockLogsModalOpen} onClose={() => setStockLogsModalOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={stockLogsModalOpen} onClose={() => setStockLogsModalOpen(false)} disableRestoreFocus maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider' }}>
           Stock Adjustment Audit Trail {selectedStockLogItem ? `: ${selectedStockLogItem.name}` : ''}
         </DialogTitle>

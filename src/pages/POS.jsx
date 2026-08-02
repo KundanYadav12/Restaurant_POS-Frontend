@@ -344,6 +344,9 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
   // Click 2: Place Order -> Check Stage 1 vs Stage 2 Workflow
   const handlePlaceOrderClick = async () => {
     if (cart.length === 0) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     
     // Fetch latest settings to guarantee instant toggle response without caching issues
     let currentSettings = receiptSettings;
@@ -1424,6 +1427,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       <Dialog
         open={showStage1Dialog}
         onClose={() => setShowStage1Dialog(false)}
+        disableRestoreFocus
         maxWidth="xs"
         fullWidth
         slotProps={{
@@ -1478,6 +1482,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       <Dialog
         open={showStage2PaymentDialog}
         onClose={() => setShowStage2PaymentDialog(false)}
+        disableRestoreFocus
         maxWidth="xs"
         fullWidth
         slotProps={{
@@ -1571,6 +1576,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       <Dialog
         open={showStage2PrintDialog}
         onClose={() => setShowStage2PrintDialog(false)}
+        disableRestoreFocus
         maxWidth="xs"
         fullWidth
         slotProps={{
