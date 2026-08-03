@@ -68,7 +68,15 @@ export async function apiFetch(url, options = {}) {
     headers
   };
 
-  let response = await fetch(fullUrl, fetchOptions);
+  let response;
+  try {
+    response = await fetch(fullUrl, fetchOptions);
+  } catch (netErr) {
+    // Automatic Network Failover to Local Gateway when internet fails
+    const localFallbackUrl = fullUrl.replace(/^https?:\/\/[^\/]+/, 'http://localhost:5000');
+    console.warn(`[API Network Failover] Internet connection lost. Route fallback -> ${localFallbackUrl}`);
+    response = await fetch(localFallbackUrl, fetchOptions);
+  }
 
   // Exclude auth-specific endpoints to prevent infinite refresh loops
   const isAuthEndpoint = fullUrl.includes('/api/auth/login') ||
