@@ -26,28 +26,42 @@ export default function App() {
   const isMobile = useMediaQuery('(max-width:900px)');
 
   useEffect(() => {
-    const syncAuthFromStorage = () => {
+    const validateAndSyncSession = async () => {
       const savedToken = localStorage.getItem('pos_token');
       const savedUser = localStorage.getItem('pos_user');
-      if (savedToken && savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          setToken(savedToken);
-          setUser(parsedUser);
-          
-          if (parsedUser.role === 'super_admin' || parsedUser.role === 'superadmin') {
-            setCurrentView('superadmin');
-          }
-        } catch (e) {
-          handleLogout();
-        }
-      } else {
+      if (!savedToken || !savedUser) {
         setToken('');
         setUser(null);
+        return;
+      }
+
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setToken(savedToken);
+        setUser(parsedUser);
+        
+        if (parsedUser.role === 'super_admin' || parsedUser.role === 'superadmin') {
+          setCurrentView('superadmin');
+        }
+
+        // Validate session with backend server
+        const res = await apiFetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            setUser(data.user);
+            localStorage.setItem('pos_user', JSON.stringify(data.user));
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          console.warn('[Session Sync] Token or session invalid after backend deployment. Prompting re-login.');
+          handleLogout();
+        }
+      } catch (e) {
+        console.error('Session sync error:', e);
       }
     };
 
-    syncAuthFromStorage();
+    validateAndSyncSession();
 
     const handleSessionExpired = () => {
       setToken('');
@@ -65,18 +79,20 @@ export default function App() {
 
     const handleStorageChange = (e) => {
       if (e.key === 'pos_token' || e.key === 'pos_user' || e.key === 'pos_refresh_token') {
-        syncAuthFromStorage();
+        validateAndSyncSession();
       }
     };
 
     window.addEventListener('auth_session_expired', handleSessionExpired);
     window.addEventListener('auth_token_refreshed', handleTokenRefreshed);
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', validateAndSyncSession);
 
     return () => {
       window.removeEventListener('auth_session_expired', handleSessionExpired);
       window.removeEventListener('auth_token_refreshed', handleTokenRefreshed);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', validateAndSyncSession);
     };
   }, []);
 

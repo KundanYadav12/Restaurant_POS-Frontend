@@ -4,6 +4,8 @@ import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw,
 import { apiFetch, getApiUrl, downloadFile } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 import DateRangePicker from '../components/DateRangePicker';
+import GstSlabReport from '../components/GstSlabReport';
+import { openWhatsAppShare } from '../utils/whatsappHelper';
 
 export default function AdminPanel({ token }) {
   const { notify, confirmDialog } = useNotify();
@@ -1376,6 +1378,7 @@ export default function AdminPanel({ token }) {
             <Tab icon={<FileText size={18} />} iconPosition="start" label="Sales Reports" />
             <Tab icon={<Utensils size={18} />} iconPosition="start" label="Item Sales Report" />
             <Tab icon={<Boxes size={18} />} iconPosition="start" label="Stock Report" />
+            <Tab icon={<FileSpreadsheet size={18} />} iconPosition="start" label="GST Slab Report (CA)" />
             <Tab icon={<Settings size={18} />} iconPosition="start" label="Receipt & KOT Settings" />
             <Tab icon={<Users size={18} />} iconPosition="start" label="Staff & Cashiers" />
             <Tab icon={<History size={18} />} iconPosition="start" label="Order History" />
@@ -2762,8 +2765,11 @@ export default function AdminPanel({ token }) {
           </Box>
         )}
 
-        {/* --- TAB 6: RECEIPT & KOT CUSTOMIZATION --- */}
-        {activeTab === 6 && (
+        {/* --- TAB 6: CA-READY GST SLAB REPORT --- */}
+        {activeTab === 6 && <GstSlabReport />}
+
+        {/* --- TAB 7: RECEIPT & KOT CUSTOMIZATION --- */}
+        {activeTab === 7 && (
           <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 3 } }}>
             {/* Header Action Bar */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
@@ -3604,7 +3610,7 @@ export default function AdminPanel({ token }) {
         )}
 
         {/* --- STAFF & CASHIERS SUB-TAB --- */}
-        {activeTab === 7 && (
+        {activeTab === 8 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
             {/* Header Section */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
@@ -3741,8 +3747,8 @@ export default function AdminPanel({ token }) {
           </Box>
         )}
 
-        {/* --- TAB 8: ORDER HISTORY --- */}
-        {activeTab === 8 && (
+        {/* --- TAB 9: ORDER HISTORY --- */}
+        {activeTab === 9 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
               <Box sx={{ minWidth: 0 }}>
@@ -4455,7 +4461,22 @@ export default function AdminPanel({ token }) {
             </>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 2, pb: 2, display: 'flex', justifyContent: 'space-between' }}>
+          {selectedHistoryOrder && (
+            <Button
+              variant="outlined"
+              color="success"
+              onClick={() => {
+                const phone = selectedHistoryOrder.order.customer_phone || prompt('Enter customer 10-digit WhatsApp phone number:');
+                if (phone) {
+                  openWhatsAppShare(selectedHistoryOrder, receiptSettings, phone);
+                }
+              }}
+              sx={{ fontWeight: 800, textTransform: 'none' }}
+            >
+              📱 Share via WhatsApp
+            </Button>
+          )}
           <Button onClick={() => setHistoryOrderDetailOpen(false)} variant="contained">Close</Button>
         </DialogActions>
       </Dialog>

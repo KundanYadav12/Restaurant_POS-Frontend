@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Grid, Card, CardMedia, CardContent, Typography, TextField, Button, Chip, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, IconButton, CircularProgress, InputAdornment, Tooltip, Select, MenuItem, Divider, Paper } from '@mui/material';
-import { Search, ShoppingCart, CreditCard, RefreshCw, Printer, AlertCircle, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
+import { Search, ShoppingCart, CreditCard, RefreshCw, Printer, AlertCircle, Maximize2, Minimize2, RotateCcw, MessageSquare } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
+import { formatWhatsAppReceipt, openWhatsAppShare } from '../utils/whatsappHelper';
 
 export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusModeChange }) {
   const { notify } = useNotify();
@@ -454,7 +455,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       );
       
       if (currentSettings?.enable_whatsapp_receipt && customerPhone) {
-        triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
+        triggerWhatsAppShare(data, customerPhone);
       }
     } catch (err) {
       notify.error(err.message || 'Checkout failed.', 'Checkout Error');
@@ -465,14 +466,23 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
   // Stage 2 Payment Method Selected (Used ONLY when Stage 2 is ON)
   const handleStage2PaymentSelect = (mode) => {
-    setStage2SelectedPaymentMode(mode);
+    let finalMode = mode;
+    if (mode === 'whatsapp') {
+      let phone = customerPhone;
+      if (!phone) {
+        phone = prompt('Enter customer 10-digit WhatsApp number:');
+        if (phone) setCustomerPhone(phone);
+      }
+      finalMode = 'cash';
+    }
+    setStage2SelectedPaymentMode(finalMode);
     setShowStage2PaymentDialog(false);
     
     const stage2Mode = receiptSettings?.print_stage2_mode || 'print_receipt_only';
     if (stage2Mode === 'show_popup') {
       setShowStage2PrintDialog(true);
     } else {
-      executeStage2CheckoutComplete(mode, stage2Mode);
+      executeStage2CheckoutComplete(finalMode, stage2Mode);
     }
   };
 
@@ -528,7 +538,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
       notify.success('Payment collected and order completed!', 'Success', 1000);
       
       if (receiptSettings?.enable_whatsapp_receipt && customerPhone) {
-        triggerWhatsAppShare(data.orderNumber || 'ORDER', totals.total_amount, customerPhone);
+        triggerWhatsAppShare(data, customerPhone);
       }
 
       setCart([]);
@@ -545,10 +555,36 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
     }
   };
 
-  const triggerWhatsAppShare = (orderNumber, total, phone) => {
-    const text = `Thanks for dining with us! Your order #${orderNumber} is confirmed. Total amount payable is Rs. ${total.toFixed(2)}.`;
-    const waUrl = `https://api.whatsapp.com/send?phone=91${phone.replace(/\D/g, '')}&text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
+  const triggerWhatsAppShare = (orderDataPayload, phone) => {
+    const rawPhone = phone || customerPhone;
+    const targetPhone = (rawPhone != null && typeof rawPhone !== 'object') ? String(rawPhone) : '';
+    if (!targetPhone) return;
+
+    let fullOrderPayload;
+    if (orderDataPayload && typeof orderDataPayload === 'object' && (orderDataPayload.order || orderDataPayload.items)) {
+      fullOrderPayload = orderDataPayload;
+    } else {
+      fullOrderPayload = {
+        order: {
+          unique_order_number: typeof orderDataPayload === 'string' ? orderDataPayload : (orderDataPayload?.orderNumber || lastOrderDetails?.orderNumber || 'ORDER'),
+          created_at: new Date(),
+          customer_name: customerName,
+          customer_phone: targetPhone,
+          cashier_name: user?.name || 'Cashier',
+          table_number_or_takeaway: tableOrTakeaway,
+          payment_mode: stage2SelectedPaymentMode || 'cash',
+          subtotal: totals.subtotal,
+          discount_type: discountType,
+          discount_value: discountValue,
+          discount_amount: totals.discount_amount,
+          tax_amount: totals.tax_amount,
+          total_amount: totals.total_amount
+        },
+        items: cart
+      };
+    }
+
+    openWhatsAppShare(fullOrderPayload, receiptSettings, targetPhone);
   };
 
   const triggerReprint = async () => {
@@ -764,28 +800,63 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
             </Box>
           </Box>
 
-          {/* Checkout Button */}
-          <Button
-            variant="contained"
-            color="primary"
-            fullWidth
-            onClick={handlePlaceOrderClick}
-            sx={{
-              mt: 1.5,
-              minHeight: '48px',
-              borderRadius: '12px',
-              fontSize: '1rem',
-              fontWeight: 800,
-              boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                bgcolor: '#ea580c',
-                boxShadow: '0 6px 20px rgba(249, 115, 22, 0.45)'
-              }
-            }}
-          >
-            Checkout Order (Click 2)
-          </Button>
+          {/* Checkout Button & WhatsApp Receipt Action Bar */}
+          <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              fullWidth
+              onClick={handlePlaceOrderClick}
+              sx={{
+                minHeight: '48px',
+                borderRadius: '12px',
+                fontSize: '1rem',
+                fontWeight: 800,
+                boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: '#ea580c',
+                  boxShadow: '0 6px 20px rgba(249, 115, 22, 0.45)'
+                }
+              }}
+            >
+              Checkout Order (Click 2)
+            </Button>
+
+            {Number(receiptSettings?.enable_whatsapp_receipt) === 1 && (
+              <Tooltip title="Send Digital WhatsApp Receipt">
+                <IconButton
+                  onClick={() => {
+                    let phone = customerPhone;
+                    if (!phone) {
+                      phone = prompt('Enter customer 10-digit WhatsApp number:');
+                      if (phone) setCustomerPhone(phone);
+                    }
+                    if (phone) {
+                      triggerWhatsAppShare(null, phone);
+                    }
+                  }}
+                  sx={{
+                    bgcolor: '#25D366',
+                    color: '#ffffff',
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 14px rgba(37, 211, 102, 0.4)',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: '#128C7E',
+                      boxShadow: '0 6px 20px rgba(37, 211, 102, 0.6)',
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                >
+                  <MessageSquare size={22} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         </Box>
       )}
     </Box>
@@ -1518,6 +1589,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
               { id: 'upi', label: 'UPI Scan', icon: '📱', desc: 'QR Code' },
               { id: 'card', label: 'Credit Card', icon: '💳', desc: 'POS Terminal' },
               { id: 'wallet', label: 'Wallet', icon: '👛', desc: 'Digital Wallet' },
+              ...(Number(receiptSettings?.enable_whatsapp_receipt) === 1 ? [{ id: 'whatsapp', label: 'WhatsApp Bill', icon: '💬', desc: 'Send Digital Bill' }] : []),
               { id: 'other', label: 'Other', icon: '⚙️', desc: 'Custom Pay' }
             ].map(method => (
               <Card
@@ -1620,6 +1692,30 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
                 {opt.label}
               </Button>
             ))}
+            {Number(receiptSettings?.enable_whatsapp_receipt) === 1 && (
+              <Button
+                variant="outlined"
+                color="success"
+                fullWidth
+                size="large"
+                disabled={loading}
+                onClick={() => {
+                  const phone = customerPhone || prompt('Enter customer 10-digit WhatsApp number:');
+                  if (phone) {
+                    triggerWhatsAppShare(null, phone);
+                  }
+                }}
+                sx={{
+                  fontWeight: 800,
+                  py: 1.5,
+                  borderRadius: '10px',
+                  justifyContent: 'center',
+                  textTransform: 'none'
+                }}
+              >
+                📱 Share Receipt via WhatsApp
+              </Button>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
