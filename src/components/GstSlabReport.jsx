@@ -22,11 +22,27 @@ export default function GstSlabReport() {
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [isGstEnabled, setIsGstEnabled] = useState(true);
 
-  // Set default dates to current month on initial mount
+  // Set default dates & fetch GST status on initial mount
   useEffect(() => {
     handlePresetChange('month');
+    fetchGstStatus();
   }, []);
+
+  const fetchGstStatus = async () => {
+    try {
+      const res = await apiFetch('/api/settings/receipt');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.gst_enabled !== undefined) {
+          setIsGstEnabled(Boolean(Number(data.gst_enabled)));
+        }
+      }
+    } catch (err) {
+      console.error('[GST Status Check Error]', err);
+    }
+  };
 
   const handlePresetChange = (preset) => {
     setDatePreset(preset);
@@ -149,6 +165,13 @@ export default function GstSlabReport() {
           </Box>
         </CardContent>
       </Card>
+
+      {/* GST Disabled Warning Banner */}
+      {!isGstEnabled && (
+        <Alert severity="info" sx={{ borderRadius: 3, mb: 3, fontWeight: 700 }}>
+          ℹ️ <strong>GST System is currently Disabled for your restaurant.</strong> Tax calculation is disabled on bills, receipts, and checkout.
+        </Alert>
+      )}
 
       {/* Filter Bar */}
       <Paper sx={{ p: 2.5, mb: 3, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>

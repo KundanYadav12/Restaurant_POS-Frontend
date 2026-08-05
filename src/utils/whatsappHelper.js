@@ -15,6 +15,8 @@ export function formatWhatsAppReceipt(orderData, receiptSettings = {}) {
   const thankMsg = receiptSettings.thank_you_message || 'Thank You! Visit Again.';
   const termsMsg = receiptSettings.terms_conditions || '';
 
+  const isGstEnabled = receiptSettings.gst_enabled !== undefined ? Boolean(receiptSettings.gst_enabled) : true;
+
   const orderNum = order.unique_order_number || (order.id ? `ORD-${order.id}` : 'ORDER');
   const dateStr = order.created_at ? new Date(order.created_at).toLocaleString('en-IN', {
     dateStyle: 'medium',
@@ -29,7 +31,7 @@ export function formatWhatsAppReceipt(orderData, receiptSettings = {}) {
 
   const subtotal = parseFloat(order.subtotal || 0);
   const discountAmount = parseFloat(order.discount_amount || 0);
-  const taxAmount = parseFloat(order.tax_amount || 0);
+  const taxAmount = isGstEnabled ? parseFloat(order.tax_amount || 0) : 0;
   const totalAmount = parseFloat(order.total_amount || 0);
 
   const cgstAmount = taxAmount / 2;
@@ -43,11 +45,11 @@ export function formatWhatsAppReceipt(orderData, receiptSettings = {}) {
   if (branchName) lines.push(`${branchName}`);
   if (address) lines.push(`${address}`);
   if (phone) lines.push(`Ph: ${phone}`);
-  if (gstin) lines.push(`GSTIN: ${gstin}`);
+  if (isGstEnabled && gstin) lines.push(`GSTIN: ${gstin}`);
   if (fssai) lines.push(`FSSAI: ${fssai}`);
   lines.push(`====================================`);
   if (headerMsg) lines.push(`_${headerMsg}_`);
-  lines.push(`*OFFICIAL DIGITAL TAX INVOICE*`);
+  lines.push(isGstEnabled ? `*OFFICIAL DIGITAL TAX INVOICE*` : `*OFFICIAL DIGITAL RECEIPT*`);
   lines.push(`------------------------------------`);
   lines.push(`*Invoice No:* ${orderNum}`);
   lines.push(`*Date & Time:* ${dateStr}`);

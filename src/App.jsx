@@ -14,6 +14,7 @@ import SuperAdminPanel from './pages/SuperAdminPanel';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { NotificationProvider } from './context/NotificationContext';
 import { apiFetch } from './utils/api';
+import { applyThemeToCssVariables } from './utils/themePresets';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -96,15 +97,58 @@ export default function App() {
     };
   }, []);
 
+  const [primaryColor, setPrimaryColor] = useState('#f97316');
+  const [secondaryColor, setSecondaryColor] = useState('#10b981');
+  const [dangerColor, setDangerColor] = useState('#ef4444');
+  const [infoColor, setInfoColor] = useState('#3b82f6');
+
+  useEffect(() => {
+    fetchGlobalTheme();
+    const handleThemeChanged = (e) => {
+      if (e.detail?.primary_color) {
+        setPrimaryColor(e.detail.primary_color);
+        setSecondaryColor(e.detail.secondary_color || '#10b981');
+        setDangerColor(e.detail.danger_color || '#ef4444');
+        setInfoColor(e.detail.info_color || '#3b82f6');
+        applyThemeToCssVariables(e.detail.primary_color, e.detail.secondary_color || '#10b981');
+      }
+    };
+    window.addEventListener('theme_changed', handleThemeChanged);
+    return () => window.removeEventListener('theme_changed', handleThemeChanged);
+  }, []);
+
+  const fetchGlobalTheme = async () => {
+    try {
+      const res = await apiFetch('/api/theme/config');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.primary_color) {
+        setPrimaryColor(data.primary_color);
+        setSecondaryColor(data.secondary_color || '#10b981');
+        setDangerColor(data.danger_color || '#ef4444');
+        setInfoColor(data.info_color || '#3b82f6');
+        applyThemeToCssVariables(data.primary_color, data.secondary_color || '#10b981');
+      }
+    } catch (err) {
+      console.warn('[App] Failed to fetch dynamic theme:', err);
+    }
+  };
+
   const muiTheme = createTheme({
     palette: {
       mode: themeMode,
       primary: {
-        main: '#f97316',
+        main: primaryColor,
         contrastText: '#ffffff'
       },
       secondary: {
-        main: '#10b981'
+        main: secondaryColor
+      },
+      error: {
+        main: dangerColor
+      },
+      info: {
+        main: infoColor
       },
       background: {
         default: themeMode === 'light' ? '#f8fafc' : '#0f172a',

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, useMediaQuery, IconButton, CircularProgress, Chip, Tooltip } from '@mui/material';
-import { Plus, ToggleLeft, ToggleRight, Database, RefreshCw, Users, ShieldAlert, BarChart, Server, Calendar, CheckCircle, Edit2, Trash2, Mail, Send, Key } from 'lucide-react';
+import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, useMediaQuery, IconButton, CircularProgress, Chip, Tooltip, Tabs, Tab } from '@mui/material';
+import { Plus, ToggleLeft, ToggleRight, Database, RefreshCw, Users, ShieldAlert, BarChart, Server, Calendar, CheckCircle, Edit2, Trash2, Mail, Send, Key, Palette, Cpu } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
+import SuperAdminThemeManager from '../components/SuperAdminThemeManager';
+import SuperAdminAiConfigManager from '../components/SuperAdminAiConfigManager';
 
 export default function SuperAdminPanel({ token }) {
   const { notify, confirmDialog } = useNotify();
+  const [saTab, setSaTab] = useState(0); // 0 = Tenants, 1 = Theme Customization
   const [stats, setStats] = useState(null);
   const [restaurants, setRestaurants] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -247,17 +250,25 @@ export default function SuperAdminPanel({ token }) {
       >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         
-        {/* Top Metric Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>Platform Multi-Tenant SaaS Administration</Typography>
-            <Typography variant="caption" color="text.secondary">Global overview of all active restaurant tenants, subscriptions, and security logs.</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant="outlined" startIcon={<RefreshCw size={16} />} onClick={fetchSaaSData}>Refresh Data</Button>
-            <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => setDialogOpen(true)}>Provision Tenant</Button>
-          </Box>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs
+            value={saTab}
+            onChange={(e, val) => setSaTab(val)}
+            indicatorColor="primary"
+            textColor="primary"
+          >
+            <Tab icon={<Server size={18} />} iconPosition="start" label="Tenants & Subscriptions" sx={{ fontWeight: 800, textTransform: 'none' }} />
+            <Tab icon={<Palette size={18} />} iconPosition="start" label="🎨 Global Theme Customization" sx={{ fontWeight: 800, textTransform: 'none' }} />
+            <Tab icon={<Cpu size={18} />} iconPosition="start" label="🤖 Google AI Configuration" sx={{ fontWeight: 800, textTransform: 'none' }} />
+          </Tabs>
         </Box>
+
+        {saTab === 1 ? (
+          <SuperAdminThemeManager token={token} />
+        ) : saTab === 2 ? (
+          <SuperAdminAiConfigManager token={token} />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
         {/* Global SaaS Stats Cards */}
         {stats && (
@@ -424,7 +435,8 @@ export default function SuperAdminPanel({ token }) {
           </CardContent>
         </Card>
 
-      </Box>
+          </Box>
+        )}
 
       {/* TENANT PROVISIONING DIALOG */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
@@ -557,7 +569,7 @@ export default function SuperAdminPanel({ token }) {
           </DialogActions>
         </form>
       </Dialog>
-
+        </Box>
       </Container>
     </Box>
   );

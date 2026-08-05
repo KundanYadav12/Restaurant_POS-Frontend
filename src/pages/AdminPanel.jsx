@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel, Divider } from '@mui/material';
-import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown, Boxes, Package, AlertTriangle, TrendingUp, History, FileSpreadsheet } from 'lucide-react';
+import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel, Divider, Alert } from '@mui/material';
+import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown, Boxes, Package, AlertTriangle, TrendingUp, History, FileSpreadsheet, Save } from 'lucide-react';
 import { apiFetch, getApiUrl, downloadFile } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 import DateRangePicker from '../components/DateRangePicker';
 import GstSlabReport from '../components/GstSlabReport';
+import MenuBulkImportModal from '../components/MenuBulkImportModal';
 import { openWhatsAppShare } from '../utils/whatsappHelper';
 
 export default function AdminPanel({ token }) {
@@ -43,6 +44,7 @@ export default function AdminPanel({ token }) {
   // --- Item Sales Report (Tab 4) States ---
   const [itemReportData, setItemReportData] = useState([]);
   const [itemReportPreset, setItemReportPreset] = useState('30days');
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [itemReportCategory, setItemReportCategory] = useState('all');
   const [itemReportSearch, setItemReportSearch] = useState('');
   const [itemReportSortBy, setItemReportSortBy] = useState('qtySold');
@@ -283,6 +285,33 @@ export default function AdminPanel({ token }) {
     }
   };
 
+  const [savingGstSettings, setSavingGstSettings] = useState(false);
+
+  const handleSaveGstSettings = async () => {
+    setSavingGstSettings(true);
+    try {
+      const res = await apiFetch('/api/settings/receipt', {
+        method: 'POST',
+        body: receiptSettings
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.settings || data;
+        setReceiptSettings(prev => ({ ...prev, ...updated }));
+        notify.success('💸 GST Settings updated and saved successfully!', 'GST Settings Saved', 2000);
+      } else {
+        const errData = await res.json();
+        notify.error(errData.error || 'Failed to save GST settings.', 'Save Error');
+      }
+    } catch (err) {
+      console.error(err);
+      notify.error('Network error saving GST settings.', 'Save Error');
+    } finally {
+      setSavingGstSettings(false);
+    }
+  };
+
   // Sales Reports presets & customs
   const [reportPreset, setReportPreset] = useState('30days');
   const [reportDateFrom, setReportDateFrom] = useState('');
@@ -480,6 +509,15 @@ export default function AdminPanel({ token }) {
     setLoading(true);
     setError('');
     try {
+      // Always fetch latest receipt & GST settings from DB on mount/tab change to guarantee persistence
+      const settingsRes = await apiFetch('/api/settings/receipt');
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setReceiptSettings(settingsData);
+        setWorkflowDraft(buildWorkflowDraft(settingsData));
+        setPermissionsDraft(buildPermissionsDraft(settingsData));
+      }
+
       if (activeTab === 0) {
         const catRes = await apiFetch('/api/categories');
         if (catRes.ok) {
@@ -1049,14 +1087,17 @@ export default function AdminPanel({ token }) {
     if (!isConfirmed) return;
 
     try {
-      await fetch(getApiUrl(`/api/menu/${id}`), {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await apiFetch(`/api/menu/${id}`, {
+        method: 'DELETE'
       });
-      notify.success('Menu item deleted successfully.', 'Item Deleted');
-      fetchData();
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete menu item.');
+      }
+      notify.success('Menu item deleted permanently from database.', 'Item Deleted');
+      await fetchData();
     } catch (err) {
-      notify.error('Failed to delete menu item.', 'Delete Error');
+      notify.error(err.message || 'Failed to delete menu item.', 'Delete Error');
     }
   };
 
@@ -1404,21 +1445,39 @@ export default function AdminPanel({ token }) {
                   Configure dish prices, GST levels, categories, and availability.
                 </Typography>
               </Box>
-              <Button
-                variant="contained"
-                startIcon={<Plus size={14} />}
-                onClick={handleOpenAddMenu}
-                sx={{
-                  fontWeight: 800,
-                  px: { xs: 1.25, sm: 2.5 },
-                  py: { xs: 0.5, sm: 1 },
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                Add Menu Item
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<FileSpreadsheet size={16} />}
+                  onClick={() => setBulkImportOpen(true)}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2 },
+                    py: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Bulk Import Menu
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<Plus size={14} />}
+                  onClick={handleOpenAddMenu}
+                  sx={{
+                    fontWeight: 800,
+                    px: { xs: 1.25, sm: 2.5 },
+                    py: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Add Menu Item
+                </Button>
+              </Box>
             </Box>
 
             {/* SEARCH & FILTER TOOLBAR */}
@@ -3160,34 +3219,80 @@ export default function AdminPanel({ token }) {
 
                   {/* Card 6: GST Configuration */}
                   <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
-                      💸 GST Settings (Taxation Mode)
-                    </Typography>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6 }}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel>GST Mode</InputLabel>
-                          <Select
-                            value={receiptSettings.gst_mode || 'excluded'}
-                            label="GST Mode"
-                            onChange={e => setReceiptSettings({ ...receiptSettings, gst_mode: e.target.value })}
-                          >
-                            <MenuItem value="included">GST Included (Product price includes GST)</MenuItem>
-                            <MenuItem value="excluded">GST Excluded (GST is added during checkout)</MenuItem>
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6 }}>
-                        <TextField
-                          label="Default GST Rate (%)"
-                          type="number"
-                          size="small"
-                          fullWidth
-                          value={receiptSettings.default_gst_rate !== undefined ? receiptSettings.default_gst_rate : 5}
-                          onChange={e => setReceiptSettings({ ...receiptSettings, default_gst_rate: parseFloat(e.target.value || 0) })}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, borderBottom: 1, borderColor: 'divider', pb: 1.5 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        💸 GST Settings (Taxation System)
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={Number(receiptSettings.gst_enabled !== undefined ? receiptSettings.gst_enabled : 1) === 1}
+                              onChange={e => setReceiptSettings({ ...receiptSettings, gst_enabled: e.target.checked ? 1 : 0 })}
+                              color="primary"
+                            />
+                          }
+                          label={
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                              {Number(receiptSettings.gst_enabled !== undefined ? receiptSettings.gst_enabled : 1) === 1 ? 'GST Billing Enabled' : 'GST Billing Disabled'}
+                            </Typography>
+                          }
                         />
+                        <Button
+                          variant="contained"
+                          size="small"
+                          color="primary"
+                          disabled={savingGstSettings}
+                          onClick={handleSaveGstSettings}
+                          startIcon={savingGstSettings ? <CircularProgress size={14} color="inherit" /> : <Save size={14} />}
+                          sx={{ fontWeight: 800, px: 2 }}
+                        >
+                          {savingGstSettings ? 'Saving...' : 'Save GST Settings'}
+                        </Button>
+                      </Box>
+                    </Box>
+
+                    {Number(receiptSettings.gst_enabled !== undefined ? receiptSettings.gst_enabled : 1) === 1 ? (
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField
+                            label="GSTIN Number"
+                            size="small"
+                            fullWidth
+                            value={receiptSettings.gst_number || ''}
+                            onChange={e => setReceiptSettings({ ...receiptSettings, gst_number: e.target.value })}
+                            placeholder="22AAAAA0000A1Z5"
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>GST Mode</InputLabel>
+                            <Select
+                              value={receiptSettings.gst_mode || 'excluded'}
+                              label="GST Mode"
+                              onChange={e => setReceiptSettings({ ...receiptSettings, gst_mode: e.target.value })}
+                            >
+                              <MenuItem value="included">GST Included (Product price includes GST)</MenuItem>
+                              <MenuItem value="excluded">GST Excluded (GST is added during checkout)</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField
+                            label="Default GST Rate (%)"
+                            type="number"
+                            size="small"
+                            fullWidth
+                            value={receiptSettings.default_gst_rate !== undefined ? receiptSettings.default_gst_rate : 5}
+                            onChange={e => setReceiptSettings({ ...receiptSettings, default_gst_rate: parseFloat(e.target.value || 0) })}
+                          />
+                        </Grid>
                       </Grid>
-                    </Grid>
+                    ) : (
+                      <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        ℹ️ <strong>GST Billing System is Disabled</strong>. Taxes will not be calculated or displayed on bills, receipts, or reports. Billing will operate as a normal non-GST restaurant.
+                      </Alert>
+                    )}
                   </Paper>
 
                   {/* Card 7: POS Printing Stages Workflow */}
@@ -3473,7 +3578,7 @@ export default function AdminPanel({ token }) {
                           {receiptSettings.whatsapp && <div>WA: {receiptSettings.whatsapp}</div>}
                           {receiptSettings.email && <div>Email: {receiptSettings.email}</div>}
                           {receiptSettings.website && <div>Web: {receiptSettings.website}</div>}
-                          {receiptSettings.gst_number && <div>GSTIN: {receiptSettings.gst_number}</div>}
+                          {Number(receiptSettings.gst_enabled !== undefined ? receiptSettings.gst_enabled : 1) === 1 && receiptSettings.gst_number && <div>GSTIN: {receiptSettings.gst_number}</div>}
                           {receiptSettings.fssai_number && <div>FSSAI: {receiptSettings.fssai_number}</div>}
                           {receiptSettings.header_message && <div style={{ marginTop: 4, fontStyle: 'italic' }}>* {receiptSettings.header_message} *</div>}
                         </Box>
@@ -3528,7 +3633,7 @@ export default function AdminPanel({ token }) {
                           <span>Discount:</span>
                           <span>-Rs. 25.00</span>
                         </div>
-                        {Boolean(receiptSettings.show_tax_details) && (
+                        {Number(receiptSettings.gst_enabled !== undefined ? receiptSettings.gst_enabled : 1) === 1 && Boolean(receiptSettings.show_tax_details) && (
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span>GST Tax (5%):</span>
                             <span>Rs. 16.25</span>
@@ -4357,7 +4462,7 @@ export default function AdminPanel({ token }) {
               required
             />
             <TextField
-              label="Email Address (Optional)"
+              label="Email Address (Optional - Auto-generated if left empty)"
               type="email"
               size="small"
               fullWidth
@@ -4665,6 +4770,17 @@ export default function AdminPanel({ token }) {
           <Button onClick={() => setStockLogsModalOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Menu & Category Bulk Import Modal */}
+      <MenuBulkImportModal
+        open={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onSuccess={() => {
+          fetchMenuItems();
+          fetchCategories();
+        }}
+        token={token}
+      />
     </Container>
   </Box>
 );

@@ -288,6 +288,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
   // Math totals calculation (GST Included vs Excluded and Discount type/value)
   const calculateTotals = () => {
+    const isGstEnabled = receiptSettings?.gst_enabled !== undefined ? Boolean(receiptSettings.gst_enabled) : true;
     const gstMode = receiptSettings?.gst_mode || 'excluded';
     
     let subtotal = 0;
@@ -296,10 +297,15 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
 
     cart.forEach(item => {
       const itemPrice = isNaN(parseFloat(item.price)) ? 0 : parseFloat(item.price);
-      const itemGst = isNaN(parseFloat(item.gst_rate)) ? 0 : parseFloat(item.gst_rate);
+      const itemGst = (!isGstEnabled || isNaN(parseFloat(item.gst_rate))) ? 0 : parseFloat(item.gst_rate);
       const qty = item.quantity || 1;
 
-      if (gstMode === 'included') {
+      if (!isGstEnabled) {
+        const basePrice = itemPrice * qty;
+        subtotal += basePrice;
+        tax_amount += 0;
+        total_before_discount += basePrice;
+      } else if (gstMode === 'included') {
         // Price already includes tax
         const itemTotal = itemPrice * qty;
         const basePrice = itemPrice / (1 + (itemGst / 100));
