@@ -3750,8 +3750,8 @@ export default function AdminPanel({ token }) {
                 <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Staff Name</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Username / Login ID</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Email Address</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Username</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Login ID</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Role</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Account Status</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</TableCell>
@@ -4452,7 +4452,7 @@ export default function AdminPanel({ token }) {
               required
             />
             <TextField
-              label="Username (Login ID)"
+              label="Username"
               size="small"
               fullWidth
               value={staffUsername}
@@ -4462,7 +4462,7 @@ export default function AdminPanel({ token }) {
               required
             />
             <TextField
-              label="Email Address (Optional - Auto-generated if left empty)"
+              label="Login ID"
               type="email"
               size="small"
               fullWidth

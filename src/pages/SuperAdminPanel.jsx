@@ -331,6 +331,38 @@ export default function SuperAdminPanel({ token }) {
           </Grid>
         )}
 
+        {/* Header Bar with Action Button */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              🏢 Restaurant Tenants & Subscriptions
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Manage SaaS restaurant accounts, plan limits, active subscriptions, and user access.
+            </Typography>
+          </Box>
+
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<Plus size={16} />}
+            onClick={() => {
+              setRestName('');
+              setOwnerName('');
+              setOwnerEmail('');
+              setOwnerMobile('');
+              setRestDomain('');
+              setDurationMonths('12');
+              setMaxUserLimit('5');
+              setPlanId('1');
+              setDialogOpen(true);
+            }}
+            sx={{ fontWeight: 800, textTransform: 'none', px: 2.5, py: 1 }}
+          >
+            + Provision New Restaurant / Tenant
+          </Button>
+        </Box>
+
         {/* Tenant List Table */}
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5 }}>
           <Table>
