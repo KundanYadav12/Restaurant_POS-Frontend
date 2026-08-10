@@ -319,6 +319,7 @@ export default function AdminPanel({ token }) {
 
   // Order history sub-tab states
   const [historyOrders, setHistoryOrders] = useState([]);
+  const [historyTotalRecords, setHistoryTotalRecords] = useState(0);
   const [historyPreset, setHistoryPreset] = useState('all');
   const [historySearch, setHistorySearch] = useState('');
   const [historyCashier, setHistoryCashier] = useState('all');
@@ -726,6 +727,11 @@ export default function AdminPanel({ token }) {
           d.setDate(d.getDate() - 7);
           from = d.toISOString().slice(0, 19).replace('T', ' ');
           to = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        } else if (historyPreset === '15days') {
+          const d = new Date();
+          d.setDate(d.getDate() - 15);
+          from = d.toISOString().slice(0, 19).replace('T', ' ');
+          to = new Date().toISOString().slice(0, 19).replace('T', ' ');
         } else if (historyPreset === '30days') {
           const d = new Date();
           d.setDate(d.getDate() - 30);
@@ -733,7 +739,7 @@ export default function AdminPanel({ token }) {
           to = new Date().toISOString().slice(0, 19).replace('T', ' ');
         }
 
-        let url = `/api/orders/history/list?limit=${historyLimit}&offset=${historyPage * historyLimit}`;
+        let url = `/api/orders/history/list?page=${historyPage + 1}&limit=${historyLimit}&offset=${historyPage * historyLimit}`;
         if (historySearch) url += `&search=${encodeURIComponent(historySearch)}`;
         if (historyCashier !== 'all') url += `&cashier_id=${historyCashier}`;
         if (historyPaymentMode !== 'all') url += `&payment_mode=${historyPaymentMode}`;
@@ -743,9 +749,20 @@ export default function AdminPanel({ token }) {
 
         const orderRes = await apiFetch(url);
         if (orderRes.ok) {
-          setHistoryOrders(await orderRes.json());
+          const resData = await orderRes.json();
+          if (resData && Array.isArray(resData.orders)) {
+            setHistoryOrders(resData.orders);
+            setHistoryTotalRecords(resData.pagination?.totalRecords ?? resData.orders.length);
+          } else if (Array.isArray(resData)) {
+            setHistoryOrders(resData);
+            setHistoryTotalRecords(resData.length);
+          } else {
+            setHistoryOrders([]);
+            setHistoryTotalRecords(0);
+          }
         } else {
           setHistoryOrders([]);
+          setHistoryTotalRecords(0);
         }
         // Load staff users as well for history filter selector
         const usersRes = await apiFetch('/api/auth/users');
@@ -4258,7 +4275,7 @@ export default function AdminPanel({ token }) {
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
               <TablePagination
                 component="div"
-                count={historyOrders.length < historyLimit && historyPage === 0 ? historyOrders.length : 1000} // estimation for large datasets
+                count={historyTotalRecords}
                 page={historyPage}
                 onPageChange={(e, newPage) => setHistoryPage(newPage)}
                 rowsPerPage={historyLimit}

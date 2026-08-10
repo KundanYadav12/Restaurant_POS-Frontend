@@ -21,6 +21,7 @@ export const DateRangePicker = ({
     { id: 'today', label: 'Today' },
     { id: 'yesterday', label: 'Yesterday' },
     { id: '7days', label: '7 Days' },
+    { id: '15days', label: '15 Days' },
     { id: '30days', label: '30 Days' },
     { id: 'custom', label: 'Custom Range' }
   ];

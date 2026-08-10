@@ -18,6 +18,7 @@ export default function CashierDashboard({ user, token, onLogout }) {
 
   // Cashier Order History states
   const [historyOrders, setHistoryOrders] = useState([]);
+  const [historyTotalRecords, setHistoryTotalRecords] = useState(0);
   const [historySearch, setHistorySearch] = useState('');
   const [historyPage, setHistoryPage] = useState(0);
   const [historyLimit, setHistoryLimit] = useState(15);
@@ -71,13 +72,23 @@ export default function CashierDashboard({ user, token, onLogout }) {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      let url = `/api/orders/history/list?limit=${historyLimit}&offset=${historyPage * historyLimit}`;
+      let url = `/api/orders/history/list?page=${historyPage + 1}&limit=${historyLimit}&offset=${historyPage * historyLimit}`;
       if (historySearch) {
         url += `&search=${encodeURIComponent(historySearch)}`;
       }
       const response = await apiFetch(url);
       if (response.ok) {
-        setHistoryOrders(await response.json());
+        const data = await response.json();
+        if (data && Array.isArray(data.orders)) {
+          setHistoryOrders(data.orders);
+          setHistoryTotalRecords(data.pagination?.totalRecords ?? data.orders.length);
+        } else if (Array.isArray(data)) {
+          setHistoryOrders(data);
+          setHistoryTotalRecords(data.length);
+        } else {
+          setHistoryOrders([]);
+          setHistoryTotalRecords(0);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -523,7 +534,7 @@ export default function CashierDashboard({ user, token, onLogout }) {
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <TablePagination
                 component="div"
-                count={historyOrders.length < historyLimit ? (historyPage * historyLimit) + historyOrders.length : -1}
+                count={historyTotalRecords}
                 page={historyPage}
                 onPageChange={(e, newPage) => setHistoryPage(newPage)}
                 rowsPerPage={historyLimit}
