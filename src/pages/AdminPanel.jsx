@@ -437,7 +437,14 @@ export default function AdminPanel({ token }) {
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       const currentPageIds = paginatedItems.map(item => item.id);
-      setSelectedIds(Array.from(new Set([...selectedIds, ...currentPageIds])));
+      const combined = Array.from(new Set([...selectedIds, ...currentPageIds]));
+      if (combined.length > 20) {
+        const capped = combined.slice(0, 20);
+        setSelectedIds(capped);
+        notify.warning('Maximum 20 items can be selected at a time. Selection capped at 20.', 'Selection Limit Reached');
+      } else {
+        setSelectedIds(combined);
+      }
     } else {
       const pageIdsSet = new Set(paginatedItems.map(item => item.id));
       setSelectedIds(selectedIds.filter(id => !pageIdsSet.has(id)));
@@ -445,30 +452,38 @@ export default function AdminPanel({ token }) {
   };
 
   const handleSelectItem = (id) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+    if (selectedIds.includes(id)) {
+      setSelectedIds(prev => prev.filter(i => i !== id));
+    } else {
+      if (selectedIds.length >= 20) {
+        notify.warning('Maximum 20 menu items can be selected at a time for bulk operations.', 'Selection Limit Reached');
+        return;
+      }
+      setSelectedIds(prev => [...prev, id]);
+    }
   };
+  const handleSelectRow = handleSelectItem;
 
   const handleBulkStatusChange = async (isAvailable) => {
     if (selectedIds.length === 0) return;
+    if (selectedIds.length > 20) {
+      notify.warning('Maximum 20 menu items can be selected at a time for bulk operations.', 'Selection Limit Reached');
+      return;
+    }
     try {
       setLoading(true);
-      await Promise.all(
-        selectedIds.map(id => {
-          const item = menuItems.find(m => m.id === id);
-          if (!item) return Promise.resolve();
-          return apiFetch(`/api/menu/${id}`, {
-            method: 'PUT',
-            body: { ...item, is_available: isAvailable ? 1 : 0 }
-          });
-        })
-      );
-      notify.success(`Updated availability status for ${selectedIds.length} menu items.`, 'Bulk Update Complete');
+      const res = await apiFetch('/api/menu/bulk-status', {
+        method: 'POST',
+        body: { ids: selectedIds, is_available: isAvailable ? 1 : 0 }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update menu items status.');
+
+      notify.success(data.message || `Updated availability status for ${selectedIds.length} menu items.`, 'Bulk Update Complete');
       setSelectedIds([]);
       await fetchData();
     } catch (err) {
-      notify.error('Failed to update status for selected items.', 'Bulk Operation Error');
+      notify.error(err.message || 'Failed to update status for selected items.', 'Bulk Operation Error');
     } finally {
       setLoading(false);
     }
@@ -476,6 +491,10 @@ export default function AdminPanel({ token }) {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
+    if (selectedIds.length > 20) {
+      notify.warning('Maximum 20 menu items can be selected at a time for bulk deletion.', 'Selection Limit Reached');
+      return;
+    }
     
     const isConfirmed = await confirmDialog({
       title: `Delete ${selectedIds.length} Menu Items`,
@@ -488,14 +507,18 @@ export default function AdminPanel({ token }) {
 
     try {
       setLoading(true);
-      await Promise.all(
-        selectedIds.map(id => apiFetch(`/api/menu/${id}`, { method: 'DELETE' }))
-      );
-      notify.success(`Deleted ${selectedIds.length} selected menu items.`, 'Bulk Delete Complete');
+      const res = await apiFetch('/api/menu/bulk-delete', {
+        method: 'POST',
+        body: { ids: selectedIds }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete selected menu items.');
+
+      notify.success(data.message || `Deleted ${selectedIds.length} selected menu items.`, 'Bulk Delete Complete');
       setSelectedIds([]);
       await fetchData();
     } catch (err) {
-      notify.error('Failed to delete selected items.', 'Bulk Delete Error');
+      notify.error(err.message || 'Failed to delete selected items.', 'Bulk Delete Error');
     } finally {
       setLoading(false);
     }
@@ -1637,8 +1660,8 @@ export default function AdminPanel({ token }) {
                   width: '100%'
                 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                  {selectedIds.length} item(s) selected
+                <Typography variant="body2" sx={{ fontWeight: 800, color: selectedIds.length >= 20 ? '#ef4444' : '#ffffff' }}>
+                  {selectedIds.length} / 20 item(s) selected {selectedIds.length >= 20 ? '(Max Limit Reached)' : '(Max 20)'}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <Button

@@ -161,6 +161,10 @@ export async function apiFetch(url, options = {}) {
     }
   }
 
+  if (response.status === 429) {
+    console.warn(`[API Rate-Limit 429] Request limit reached on ${fullUrl}`);
+  }
+
   return response;
 }
 

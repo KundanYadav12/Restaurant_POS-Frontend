@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Grid, Card, CardMedia, CardContent, Typography, TextField, Button, Chip, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, IconButton, CircularProgress, InputAdornment, Tooltip, Select, MenuItem, Divider, Paper } from '@mui/material';
-import { Search, ShoppingCart, CreditCard, RefreshCw, Printer, AlertCircle, Maximize2, Minimize2, RotateCcw, MessageSquare } from 'lucide-react';
+import { Search, ShoppingCart, CreditCard, RefreshCw, Printer, AlertCircle, Maximize2, Minimize2, RotateCcw, MessageSquare, LayoutList, Grid as GridIcon } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 import { formatWhatsAppReceipt, openWhatsAppShare } from '../utils/whatsappHelper';
@@ -22,13 +22,27 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
   const [vegOnly, setVegOnly] = useState(false);
   const [mobileTab, setMobileTab] = useState(0); // 0 = Menu Grid, 1 = Cart summary
 
-  // Account persistent display sizing: small (compact), medium (standard), large (spacious)
+  // Account persistent display sizing: small (compact), medium (standard), large (spacious), icon
   const [cardSize, setCardSize] = useState(() => localStorage.getItem('pos_card_size') || 'medium');
+
+  // Category Navigation Layout: 'rail' (vertical left sidebar) vs 'chips' (horizontal top chip bar)
+  const [categoryLayout, setCategoryLayout] = useState(() => {
+    const saved = localStorage.getItem('pos_category_layout');
+    if (saved === 'rail' || saved === 'chips') return saved;
+    return 'chips'; // Initial fallback before categories load
+  });
 
   // POS Focus Mode (Kiosk Mode) State & Persistence
   const [focusMode, setFocusMode] = useState(() => {
     return isFocusMode !== undefined ? isFocusMode : (localStorage.getItem('pos_focus_mode') === 'true');
   });
+
+  // Auto-detect category navigation preference (defaults to Vertical Rail if > 5 categories)
+  useEffect(() => {
+    if (!localStorage.getItem('pos_category_layout') && categories.length > 0) {
+      setCategoryLayout(categories.length > 5 ? 'rail' : 'chips');
+    }
+  }, [categories]);
 
   useEffect(() => {
     if (isFocusMode !== undefined) {
@@ -871,46 +885,93 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', width: '100%', maxWidth: { xl: '1920px' }, mx: 'auto' }}>
       
-      {/* POS Focus Mode Kiosk Header Banner */}
+      {/* POS Focus Mode Kiosk Header Banner (Restructured 2-Row Compact Layout) */}
       {focusMode && (
-        <Box sx={{
-          bgcolor: '#0f172a',
-          color: '#ffffff',
-          px: { xs: 2, md: 3 },
-          py: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid #1e293b',
-          zIndex: 1200
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Chip label="POS KIOSK MODE" size="small" color="primary" sx={{ fontWeight: 900, fontSize: '11px', px: 0.5 }} />
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.5px', color: '#f8fafc' }}>
-              {user?.restaurant_name || 'POS Terminal'} | Cashier: {user?.name || user?.username || 'Active'}
-            </Typography>
-          </Box>
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1200,
+            bgcolor: '#0f172a',
+            color: '#ffffff',
+            px: { xs: 1.5, sm: 2.5, md: 3 },
+            py: 0.75,
+            borderRadius: 0,
+            borderBottom: '1px solid #1e293b'
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, width: '100%' }}>
+            {/* ROW 1: Restaurant Name (Left) + Exit Button (Right) */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', minWidth: 0 }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 800,
+                  fontSize: { xs: '1rem', sm: '1.1rem' },
+                  color: '#f8fafc',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  lineHeight: 1.2
+                }}
+              >
+                {user?.restaurant_name || 'POS Terminal'}
+              </Typography>
 
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleToggleFocusMode}
-            startIcon={<Minimize2 size={15} />}
-            sx={{
-              fontWeight: 800,
-              borderRadius: '999px',
-              px: 2,
-              py: 0.5,
-              fontSize: '12px',
-              bgcolor: '#f59e0b',
-              color: '#000000',
-              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
-              '&:hover': { bgcolor: '#d97706', color: '#ffffff' }
-            }}
-          >
-            Exit POS Focus Mode
-          </Button>
-        </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleToggleFocusMode}
+                startIcon={<Minimize2 size={14} />}
+                sx={{
+                  fontWeight: 800,
+                  borderRadius: '999px',
+                  px: 1.5,
+                  py: 0.2,
+                  height: 28,
+                  fontSize: '11px',
+                  borderColor: '#f59e0b',
+                  color: '#f59e0b',
+                  bgcolor: 'rgba(245, 158, 11, 0.1)',
+                  textTransform: 'none',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  '&:hover': {
+                    bgcolor: '#f59e0b',
+                    color: '#000000',
+                    borderColor: '#f59e0b'
+                  }
+                }}
+              >
+                ✕ Exit
+              </Button>
+            </Box>
+
+            {/* ROW 2: Kiosk Badge + Cashier Info */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, width: '100%' }}>
+              <Chip
+                label="POS KIOSK MODE"
+                size="small"
+                color="primary"
+                sx={{ fontWeight: 900, fontSize: '9px', height: 18, px: 0.4, flexShrink: 0 }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700,
+                  fontSize: '0.72rem',
+                  color: '#94a3b8',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                Cashier: <b>{user?.name || user?.username || 'Active'}</b>
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
       )}
 
       {/* Mobile view segment selector tabs (Cashier role only) */}
@@ -920,6 +981,8 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
           onChange={(e, newVal) => setMobileTab(newVal)}
           variant="fullWidth"
           sx={{
+            minHeight: 36,
+            height: 36,
             borderBottom: 1,
             borderColor: 'divider',
             bgcolor: 'background.paper',
@@ -928,7 +991,10 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
             },
             '& .MuiTab-root': {
               fontWeight: 800,
-              fontSize: '13px',
+              fontSize: '12px',
+              minHeight: 36,
+              height: 36,
+              py: 0.5,
               borderBottom: '3px solid transparent',
               transition: 'all 0.2s',
               color: 'text.secondary',
@@ -958,7 +1024,7 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
           userSelect: isResizing ? 'none' : 'auto'
         }}
       >
-        {/* Left Side: Category Chips and Menu Card Grid (Fluid Width, minWidth 400px) */}
+        {/* Left Side: Category Rail/Chips and Menu Card Grid */}
         {(!isMobileOrTablet || mobileTab === 0) && (
           <Box sx={{
             flex: 1,
@@ -966,81 +1032,147 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
-            overflowY: 'auto',
-            p: { xs: 2, md: 3 },
-            gap: 2.5
+            overflowY: 'hidden',
+            p: { xs: 1, sm: 1.5, md: 2 },
+            gap: '0.5rem'
           }}>
             
-            {/* Filtering header */}
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%' }}>
-              <Box sx={{ flex: 1, minWidth: 200 }}>
-                <TextField
-                  placeholder="Search dishes by name or SKU..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  fullWidth
-                  size="small"
-                  slotProps={{
-                    input: {
-                      startAdornment: <Search size={16} style={{ marginRight: 8, color: '#94a3b8' }} />
-                    }
-                  }}
-                />
-              </Box>
+            {/* Compact Filtering Header & Controls Stack (Standardized 0.5rem Vertical Rhythm) */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', flexShrink: 0 }}>
+              {/* 1. Search Bar (Height: 40px, MB: 0.5rem) */}
+              <TextField
+                placeholder="Search dishes by name or SKU..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                fullWidth
+                size="small"
+                slotProps={{
+                  input: {
+                    startAdornment: <Search size={16} style={{ marginRight: 8, color: '#94a3b8' }} />
+                  }
+                }}
+                sx={{
+                  '& .MuiInputBase-root': {
+                    height: 40,
+                    fontSize: '13px',
+                    borderRadius: '10px'
+                  }
+                }}
+              />
 
-              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-                {/* Enter POS Focus Mode Toggle Button */}
+              {/* 2. Consolidated Single Action Row: [Veg Icon (36px)] [Category Rail Icon (36px)] | [Density Toggles Group] */}
+              <Box sx={{ display: 'flex', gap: '0.5rem', alignItems: 'center', width: '100%', minHeight: 40 }}>
+                {/* Focus Mode Button (if not in Focus Mode) */}
                 {!focusMode && (
                   <Button
                     variant="contained"
                     color="primary"
                     size="small"
                     onClick={handleToggleFocusMode}
-                    startIcon={<Maximize2 size={16} />}
+                    startIcon={<Maximize2 size={13} />}
                     sx={{
                       fontWeight: 800,
-                      fontSize: '13px',
-                      height: 38,
-                      px: 2,
-                      borderRadius: '999px',
-                      boxShadow: '0 4px 12px rgba(249, 115, 22, 0.3)',
-                      transition: 'all 0.2s ease',
+                      fontSize: '0.75rem',
+                      height: 36,
+                      px: 1.2,
+                      borderRadius: '9999px',
+                      textTransform: 'none',
+                      boxShadow: '0 2px 6px rgba(249, 115, 22, 0.25)',
+                      flexShrink: 0,
                       '&:hover': {
                         transform: 'translateY(-1px)',
-                        boxShadow: '0 6px 16px rgba(249, 115, 22, 0.45)'
+                        boxShadow: '0 4px 10px rgba(249, 115, 22, 0.4)'
                       }
                     }}
                   >
-                    Enter POS Focus Mode
+                    Focus
                   </Button>
                 )}
 
-                {/* Standardized Veg-Only green pill toggle */}
-                <Chip
-                  label="🟢 Veg Only"
-                  onClick={() => setVegOnly(prev => !prev)}
-                  color={vegOnly ? 'success' : 'default'}
-                  variant={vegOnly ? 'default' : 'outlined'}
-                  sx={{
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    height: 38,
-                    px: 1,
-                    borderColor: 'success.main',
-                    color: vegOnly ? '#fff' : 'success.main',
-                    bgcolor: vegOnly ? 'success.main' : 'transparent',
-                    '&:hover': {
-                      bgcolor: vegOnly ? 'success.dark' : 'rgba(46, 125, 50, 0.04)'
-                    }
-                  }}
-                />
+                {/* 1. Veg Only — ICON ONLY Button (36px x 36px) */}
+                <Tooltip title={vegOnly ? "Show All Items (Veg & Non-Veg)" : "Filter Veg Only Items"}>
+                  <IconButton
+                    size="small"
+                    aria-label="Veg Only filter"
+                    onClick={() => setVegOnly(prev => !prev)}
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      border: '1.5px solid',
+                      borderColor: '#16a34a',
+                      bgcolor: vegOnly ? '#16a34a' : 'transparent',
+                      color: vegOnly ? '#ffffff' : '#16a34a',
+                      flexShrink: 0,
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        bgcolor: vegOnly ? '#15803d' : 'rgba(22, 163, 74, 0.08)'
+                      }
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        bgcolor: vegOnly ? '#ffffff' : '#16a34a'
+                      }}
+                    />
+                  </IconButton>
+                </Tooltip>
 
-                {/* Grid size controls */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'action.hover', p: 0.5, borderRadius: 20, border: 1, borderColor: 'divider' }}>
-                  {['small', 'medium', 'large'].map(size => (
+                {/* 2. Category Rail / Grid Toggle Icon Button (36px x 36px) */}
+                <Tooltip title={categoryLayout === 'rail' ? "Switch to Horizontal Category Chips" : "Switch to Vertical Category Rail"}>
+                  <IconButton
+                    size="small"
+                    aria-label="Toggle category navigation view"
+                    onClick={() => {
+                      const newLayout = categoryLayout === 'rail' ? 'chips' : 'rail';
+                      setCategoryLayout(newLayout);
+                      localStorage.setItem('pos_category_layout', newLayout);
+                    }}
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      border: '1.5px solid',
+                      borderColor: 'divider',
+                      borderRadius: '50%',
+                      bgcolor: categoryLayout === 'rail' ? 'primary.main' : 'transparent',
+                      color: categoryLayout === 'rail' ? '#ffffff' : 'primary.main',
+                      flexShrink: 0,
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        bgcolor: categoryLayout === 'rail' ? 'primary.dark' : 'rgba(99, 102, 241, 0.08)'
+                      }
+                    }}
+                  >
+                    {categoryLayout === 'rail' ? <LayoutList size={16} /> : <GridIcon size={16} />}
+                  </IconButton>
+                </Tooltip>
+
+                {/* 3. Density Toggle Group (Icon | Compact | Standard | Spacious) — Scrollable on right */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.35,
+                    bgcolor: 'action.hover',
+                    p: 0.35,
+                    borderRadius: 20,
+                    border: 1,
+                    borderColor: 'divider',
+                    overflowX: 'auto',
+                    flex: 1,
+                    minWidth: 0,
+                    whiteSpace: 'nowrap',
+                    WebkitOverflowScrolling: 'touch',
+                    '&::-webkit-scrollbar': { display: 'none' }
+                  }}
+                >
+                  {['icon', 'small', 'medium', 'large'].map(size => (
                     <Chip
                       key={size}
-                      label={size === 'small' ? 'Compact' : size === 'medium' ? 'Standard' : 'Spacious'}
+                      label={size === 'icon' ? 'Icon' : size === 'small' ? 'Compact' : size === 'medium' ? 'Standard' : 'Spacious'}
                       onClick={() => {
                         setCardSize(size);
                         localStorage.setItem('pos_card_size', size);
@@ -1051,8 +1183,10 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
                       sx={{
                         fontWeight: 800,
                         height: 28,
-                        fontSize: '11px',
+                        fontSize: '0.75rem',
+                        px: 0.75,
                         border: 'none',
+                        flexShrink: 0,
                         '&:hover': {
                           bgcolor: cardSize === size ? 'primary.dark' : 'action.selected'
                         }
@@ -1063,310 +1197,737 @@ export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusM
               </Box>
             </Box>
 
-            {/* Categories horizontal list with trailing fade effect */}
-            <Box sx={{ position: 'relative', width: '100%' }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  overflowX: 'auto',
-                  pb: 1.5,
-                  pr: 5,
-                  scrollSnapType: 'x mandatory',
-                  scrollBehavior: 'smooth',
-                  whiteSpace: 'nowrap',
-                  WebkitOverflowScrolling: 'touch',
-                  '&::-webkit-scrollbar': { display: 'none' }
-                }}
-              >
-                {/* All Items Chip */}
-                <Chip
-                  label="🌟 All Items"
-                  onClick={() => setActiveCategory(null)}
-                  color={activeCategory === null ? 'primary' : 'default'}
-                  variant={activeCategory === null ? 'default' : 'outlined'}
+            {/* Category Navigation & Menu Grid Container */}
+            {categoryLayout === 'rail' ? (
+              /* VERTICAL CATEGORY RAIL LAYOUT (2-Column Split) */
+              <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5 }, flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
+                {/* LEFT COLUMN: Vertical Scrollable Category Sidebar Rail (Text-Only Compact Buttons) */}
+                <Box
                   sx={{
-                    fontWeight: 800,
-                    fontSize: '13px',
-                    scrollSnapAlign: 'start',
+                    width: { xs: '84px', sm: '92px', md: '102px' },
                     flexShrink: 0,
-                    '& .MuiChip-label': {
-                      whiteSpace: 'nowrap',
-                      overflow: 'visible'
-                    }
-                  }}
-                />
-
-                {categories.map(cat => (
-                  <Chip
-                    key={cat.id}
-                    label={cat.name}
-                    onClick={() => setActiveCategory(cat.id)}
-                    color={activeCategory === cat.id ? 'primary' : 'default'}
-                    variant={activeCategory === cat.id ? 'default' : 'outlined'}
-                    sx={{
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      scrollSnapAlign: 'start',
-                      flexShrink: 0,
-                      '& .MuiChip-label': {
-                        whiteSpace: 'nowrap',
-                        overflow: 'visible'
-                      }
-                    }}
-                  />
-                ))}
-              </Box>
-              {/* Fade gradient mask on the right edge */}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  right: 0,
-                  width: '50px',
-                  height: '80%',
-                  background: theme => `linear-gradient(to right, transparent, ${theme.palette.background.default})`,
-                  pointerEvents: 'none',
-                  zIndex: 2
-                }}
-              />
-            </Box>
-
-            {/* Food Menu Items Responsive CSS Grid (Ultra-Compact Reflow) */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize === 'small' ? '120px' : cardSize === 'medium' ? '145px' : '175px'}, 1fr))`,
-                gap: cardSize === 'small' ? '0.65rem' : cardSize === 'medium' ? '0.85rem' : '1rem',
-                width: '100%'
-              }}
-            >
-              {filteredItems.map(item => (
-                <Card
-                  key={item.id}
-                  onClick={() => isCashier && handleItemClick(item)}
-                  sx={{
-                    cursor: isCashier ? 'pointer' : 'default',
-                    position: 'relative',
-                    borderRadius: cardSize === 'small' ? '12px' : '16px',
-                    overflow: 'hidden',
-                    aspectRatio: cardSize === 'small' ? '1/1' : cardSize === 'medium' ? '1/1' : '4/5',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    opacity: item.is_available ? 1 : 0.65,
-                    transition: 'all 0.25s ease',
-                    '&:hover': {
-                      transform: 'translateY(-3px)',
-                      boxShadow: '0 10px 24px rgba(0,0,0,0.18)',
-                      '& .card-bg-image': {
-                        transform: 'scale(1.08)'
-                      }
-                    },
-                    '&:active': {
-                      transform: 'scale(0.97)'
-                    }
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.4rem',
+                    overflowY: 'auto',
+                    pr: 0.5,
+                    py: 0.2,
+                    borderRight: 1,
+                    borderColor: 'divider',
+                    WebkitOverflowScrolling: 'touch',
+                    '&::-webkit-scrollbar': { width: '3px' },
+                    '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: '4px' }
                   }}
                 >
-                  {/* Full-bleed Background Image with smooth hover scale */}
-                  {item.image_url ? (
-                    <CardMedia
-                      component="img"
-                      image={item.image_url}
-                      alt={item.name}
-                      className="card-bg-image"
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        transition: 'transform 0.4s ease'
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      className="card-bg-image"
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: cardSize === 'small' ? '28px' : cardSize === 'medium' ? '36px' : '44px',
-                        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                        transition: 'transform 0.4s ease'
-                      }}
-                    >
-                      {item.name.includes('Burger') && '🍔'}
-                      {item.name.includes('Fries') && '🍟'}
-                      {item.name.includes('Pizza') && '🍕'}
-                      {item.name.includes('Cone') && '🍦'}
-                      {item.name.includes('McFlurry') && '🍨'}
-                      {item.name.includes('Coke') && '🥤'}
-                      {item.name.includes('Fanta') && '🥤'}
-                      {item.name.includes('Coffee') && '☕'}
-                      {item.name.includes('Latte') && '☕'}
-                      {item.name.includes('Cappuccino') && '☕'}
-                      {item.name.includes('Macchiato') && '☕'}
-                      {item.name.includes('Croissant') && '🥐'}
-                      {item.name.includes('Muffin') && '🧁'}
-                      {item.name.includes('Frappuccino') && '🍹'}
-                      {!['Burger', 'Fries', 'Pizza', 'Cone', 'McFlurry', 'Coke', 'Fanta', 'Coffee', 'Latte', 'Cappuccino', 'Macchiato', 'Croissant', 'Muffin', 'Frappuccino'].some(x => item.name.includes(x)) && '🍽️'}
-                    </Box>
-                  )}
-
-                  {/* Gradient Scrim Overlay for Readability (WCAG AA Contrast) */}
+                  {/* All Items Option (Text-Only) */}
                   <Box
+                    onClick={() => setActiveCategory(null)}
                     sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.05) 75%, transparent 100%)',
-                      pointerEvents: 'none',
-                      zIndex: 2
-                    }}
-                  />
-
-                  {/* Top-Left Veg / Non-Veg Badge */}
-                  <Chip
-                    label={item.is_veg === 1 ? 'Veg' : 'Non-Veg'}
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 8,
-                      left: 8,
-                      zIndex: 10,
-                      fontWeight: 800,
-                      height: cardSize === 'small' ? 16 : 18,
-                      fontSize: cardSize === 'small' ? '9px' : '10px',
-                      bgcolor: item.is_veg === 1 ? '#16a34a' : '#dc2626',
-                      color: '#ffffff',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                      borderRadius: '999px',
-                      px: 0.2
-                    }}
-                  />
-
-                  {/* Content Overlay (Bottom Alignment) */}
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      p: cardSize === 'small' ? '0.5rem 0.6rem' : cardSize === 'medium' ? 1.2 : 1.5,
-                      zIndex: 10,
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: cardSize === 'small' ? '0.15rem' : '0.2rem'
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '44px',
+                      p: '0.45rem 0.35rem',
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.2s ease',
+                      bgcolor: activeCategory === null ? 'primary.main' : 'action.hover',
+                      color: activeCategory === null ? '#ffffff' : 'text.primary',
+                      boxShadow: activeCategory === null ? '0 3px 10px rgba(99, 102, 241, 0.35)' : 'none',
+                      '&:hover': {
+                        bgcolor: activeCategory === null ? 'primary.dark' : 'action.selected'
+                      }
                     }}
                   >
                     <Typography
-                      variant="body2"
+                      variant="caption"
                       sx={{
                         fontWeight: 800,
-                        fontSize: cardSize === 'small' ? 'clamp(0.75rem, 2.5vw, 0.9rem)' : cardSize === 'medium' ? '12px' : '13px',
-                        color: '#ffffff',
-                        textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-                        ...(cardSize === 'small' ? {
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: 'block'
-                        } : {
-                          display: '-webkit-box',
-                          overflow: 'hidden',
-                          WebkitBoxOrient: 'vertical',
-                          WebkitLineClamp: 2
-                        })
+                        fontSize: { xs: '0.75rem', sm: '0.78rem', md: '0.82rem' },
+                        lineHeight: 1.2,
+                        textAlign: 'center',
+                        display: '-webkit-box',
+                        overflow: 'hidden',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 2,
+                        width: '100%',
+                        wordBreak: 'break-word'
                       }}
                     >
-                      {item.name}
+                      All Items
                     </Typography>
+                  </Box>
 
+                  {/* Category Items (Text-Only) */}
+                  {categories.map(cat => {
+                    const isActive = activeCategory === cat.id;
+                    return (
+                      <Box
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minHeight: '44px',
+                          p: '0.45rem 0.35rem',
+                          borderRadius: 2,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.2s ease',
+                          bgcolor: isActive ? 'primary.main' : 'action.hover',
+                          color: isActive ? '#ffffff' : 'text.primary',
+                          boxShadow: isActive ? '0 3px 10px rgba(99, 102, 241, 0.35)' : 'none',
+                          '&:hover': {
+                            bgcolor: isActive ? 'primary.dark' : 'action.selected'
+                          }
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontWeight: 800,
+                            fontSize: { xs: '0.75rem', sm: '0.78rem', md: '0.82rem' },
+                            lineHeight: 1.2,
+                            textAlign: 'center',
+                            display: '-webkit-box',
+                            overflow: 'hidden',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: 2,
+                            width: '100%',
+                            wordBreak: 'break-word'
+                          }}
+                        >
+                          {cat.name}
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+
+                {/* RIGHT COLUMN: Food Menu Items Grid */}
+                <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', pr: 0.5 }}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: cardSize === 'icon'
+                        ? { xs: 'repeat(4, 1fr)', sm: 'repeat(6, 1fr)', md: 'repeat(8, 1fr)', xl: 'repeat(10, 1fr)' }
+                        : `repeat(auto-fill, minmax(${cardSize === 'small' ? '120px' : cardSize === 'medium' ? '145px' : '175px'}, 1fr))`,
+                      gap: cardSize === 'icon' ? '0.45rem' : cardSize === 'small' ? '0.65rem' : cardSize === 'medium' ? '0.85rem' : '1rem',
+                      width: '100%'
+                    }}
+                  >
+                    {filteredItems.map(item => (
+                cardSize === 'icon' ? (
+                  /* ICON MODE TILE (Ultra-Dense 4/row Mobile Grid Tile) */
+                  <Card
+                    key={item.id}
+                    onClick={() => isCashier && handleItemClick(item)}
+                    sx={{
+                      cursor: isCashier ? 'pointer' : 'default',
+                      position: 'relative',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      aspectRatio: '1/1',
+                      boxShadow: '0 3px 10px rgba(0,0,0,0.12)',
+                      opacity: item.is_available ? 1 : 0.6,
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+                        '& .card-bg-image': {
+                          transform: 'scale(1.08)'
+                        }
+                      },
+                      '&:active': {
+                        transform: 'scale(0.95)'
+                      }
+                    }}
+                  >
+                    {/* Background Image or Emoji */}
+                    {item.image_url ? (
+                      <CardMedia
+                        component="img"
+                        image={item.image_url}
+                        alt={item.name}
+                        className="card-bg-image"
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transition: 'transform 0.4s ease'
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        className="card-bg-image"
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 'clamp(20px, 4vw, 32px)',
+                          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                          transition: 'transform 0.4s ease'
+                        }}
+                      >
+                        {item.name.includes('Burger') && '🍔'}
+                        {item.name.includes('Fries') && '🍟'}
+                        {item.name.includes('Pizza') && '🍕'}
+                        {item.name.includes('Cone') && '🍦'}
+                        {item.name.includes('McFlurry') && '🍨'}
+                        {item.name.includes('Coke') && '🥤'}
+                        {item.name.includes('Fanta') && '🥤'}
+                        {item.name.includes('Coffee') && '☕'}
+                        {item.name.includes('Latte') && '☕'}
+                        {item.name.includes('Cappuccino') && '☕'}
+                        {item.name.includes('Macchiato') && '☕'}
+                        {item.name.includes('Croissant') && '🥐'}
+                        {item.name.includes('Muffin') && '🧁'}
+                        {item.name.includes('Frappuccino') && '🍹'}
+                        {!['Burger', 'Fries', 'Pizza', 'Cone', 'McFlurry', 'Coke', 'Fanta', 'Coffee', 'Latte', 'Cappuccino', 'Macchiato', 'Croissant', 'Muffin', 'Frappuccino'].some(x => item.name.includes(x)) && '🍽️'}
+                      </Box>
+                    )}
+
+                    {/* Gradient Scrim Overlay for Contrast */}
                     <Box
                       sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0.1) 80%, transparent 100%)',
+                        pointerEvents: 'none',
+                        zIndex: 2
+                      }}
+                    />
+
+                    {/* Top-Left Veg / Non-Veg Indicator Dot */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 6,
+                        left: 6,
+                        zIndex: 10,
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        bgcolor: item.is_veg === 1 ? '#22C55E' : '#EF4444',
+                        border: '1.5px solid #ffffff',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.5)'
+                      }}
+                    />
+
+                    {/* Top-Right Quick Add Badge */}
+                    {item.is_available ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 6,
+                          right: 6,
+                          zIndex: 10,
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          bgcolor: '#ffffff',
+                          color: '#f97316',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '13px',
+                          fontWeight: 900,
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+                        }}
+                      >
+                        +
+                      </Box>
+                    ) : (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 6,
+                          right: 6,
+                          zIndex: 10,
+                          px: 0.6,
+                          py: 0.1,
+                          borderRadius: '999px',
+                          bgcolor: 'rgba(239, 68, 68, 0.9)',
+                          color: '#ffffff',
+                          fontSize: '8px',
+                          fontWeight: 800
+                        }}
+                      >
+                        OUT
+                      </Box>
+                    )}
+
+                    {/* Bottom Content Area: Price Pill & Truncated Name */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        p: '0.35rem 0.35rem 0.4rem',
+                        zIndex: 10,
                         display: 'flex',
-                        justifyContent: 'space-between',
+                        flexDirection: 'column',
                         alignItems: 'center',
-                        gap: cardSize === 'small' ? '0.4rem' : '0.2rem',
-                        width: '100%',
-                        mt: 0.2
+                        gap: '0.15rem',
+                        textAlign: 'center'
                       }}
                     >
                       <Typography
                         variant="caption"
                         sx={{
-                          fontWeight: 800,
-                          fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.85rem)' : cardSize === 'medium' ? '12px' : '13px',
+                          fontWeight: 900,
+                          fontSize: 'clamp(0.65rem, 1.8vw, 0.75rem)',
                           color: '#FFB020',
-                          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                          bgcolor: 'rgba(0, 0, 0, 0.6)',
+                          px: 0.7,
+                          py: 0.1,
+                          borderRadius: '999px',
+                          lineHeight: 1.1,
                           whiteSpace: 'nowrap',
-                          ...(cardSize === 'small' ? {
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '60%',
-                            flexShrink: 1
-                          } : {})
+                          border: '1px solid rgba(255,255,255,0.15)'
                         }}
                       >
-                        Rs. {parseFloat(item.price).toFixed(2)}
+                        ₹{Math.round(parseFloat(item.price))}
                       </Typography>
 
-                      {!item.is_available ? (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: 'clamp(0.65rem, 1.8vw, 0.75rem)',
+                          color: '#ffffff',
+                          textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+                          display: '-webkit-box',
+                          overflow: 'hidden',
+                          WebkitBoxOrient: 'vertical',
+                          WebkitLineClamp: 2,
+                          lineHeight: 1.15,
+                          width: '100%'
+                        }}
+                      >
+                        {item.name}
+                      </Typography>
+                    </Box>
+                  </Card>
+                ) : (
+                  /* STANDARD / COMPACT / SPACIOUS MODES */
+                  <Card
+                    key={item.id}
+                    onClick={() => isCashier && handleItemClick(item)}
+                    sx={{
+                      cursor: isCashier ? 'pointer' : 'default',
+                      position: 'relative',
+                      borderRadius: cardSize === 'small' ? '12px' : '16px',
+                      overflow: 'hidden',
+                      aspectRatio: cardSize === 'small' ? '1/1' : cardSize === 'medium' ? '1/1' : '4/5',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      opacity: item.is_available ? 1 : 0.65,
+                      transition: 'all 0.25s ease',
+                      '&:hover': {
+                        transform: 'translateY(-3px)',
+                        boxShadow: '0 10px 24px rgba(0,0,0,0.18)',
+                        '& .card-bg-image': {
+                          transform: 'scale(1.08)'
+                        }
+                      },
+                      '&:active': {
+                        transform: 'scale(0.97)'
+                      }
+                    }}
+                  >
+                    {/* Full-bleed Background Image with smooth hover scale */}
+                    {item.image_url ? (
+                      <CardMedia
+                        component="img"
+                        image={item.image_url}
+                        alt={item.name}
+                        className="card-bg-image"
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transition: 'transform 0.4s ease'
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        className="card-bg-image"
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: cardSize === 'small' ? '28px' : cardSize === 'medium' ? '36px' : '44px',
+                          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                          transition: 'transform 0.4s ease'
+                        }}
+                      >
+                        {item.name.includes('Burger') && '🍔'}
+                        {item.name.includes('Fries') && '🍟'}
+                        {item.name.includes('Pizza') && '🍕'}
+                        {item.name.includes('Cone') && '🍦'}
+                        {item.name.includes('McFlurry') && '🍨'}
+                        {item.name.includes('Coke') && '🥤'}
+                        {item.name.includes('Fanta') && '🥤'}
+                        {item.name.includes('Coffee') && '☕'}
+                        {item.name.includes('Latte') && '☕'}
+                        {item.name.includes('Cappuccino') && '☕'}
+                        {item.name.includes('Macchiato') && '☕'}
+                        {item.name.includes('Croissant') && '🥐'}
+                        {item.name.includes('Muffin') && '🧁'}
+                        {item.name.includes('Frappuccino') && '🍹'}
+                        {!['Burger', 'Fries', 'Pizza', 'Cone', 'McFlurry', 'Coke', 'Fanta', 'Coffee', 'Latte', 'Cappuccino', 'Macchiato', 'Croissant', 'Muffin', 'Frappuccino'].some(x => item.name.includes(x)) && '🍽️'}
+                      </Box>
+                    )}
+
+                    {/* Gradient Scrim Overlay for Readability (WCAG AA Contrast) */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.05) 75%, transparent 100%)',
+                        pointerEvents: 'none',
+                        zIndex: 2
+                      }}
+                    />
+
+                    {/* Top-Left Veg / Non-Veg Badge */}
+                    <Chip
+                      label={item.is_veg === 1 ? 'Veg' : 'Non-Veg'}
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        left: 8,
+                        zIndex: 10,
+                        fontWeight: 800,
+                        height: cardSize === 'small' ? 16 : 18,
+                        fontSize: cardSize === 'small' ? '9px' : '10px',
+                        bgcolor: item.is_veg === 1 ? '#16a34a' : '#dc2626',
+                        color: '#ffffff',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                        borderRadius: '999px',
+                        px: 0.2
+                      }}
+                    />
+
+                    {/* Content Overlay (Bottom Alignment) */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        p: cardSize === 'small' ? '0.5rem 0.6rem' : cardSize === 'medium' ? 1.2 : 1.5,
+                        zIndex: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: cardSize === 'small' ? '0.15rem' : '0.2rem'
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: cardSize === 'small' ? 'clamp(0.75rem, 2.5vw, 0.9rem)' : cardSize === 'medium' ? '12px' : '13px',
+                          color: '#ffffff',
+                          textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+                          ...(cardSize === 'small' ? {
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: 'block'
+                          } : {
+                            display: '-webkit-box',
+                            overflow: 'hidden',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: 2
+                          })
+                        }}
+                      >
+                        {item.name}
+                      </Typography>
+
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: cardSize === 'small' ? '0.4rem' : '0.2rem',
+                          width: '100%',
+                          mt: 0.2
+                        }}
+                      >
                         <Typography
                           variant="caption"
                           sx={{
-                            color: '#ef4444',
                             fontWeight: 800,
-                            fontSize: cardSize === 'small' ? '10px' : '11px',
-                            flexShrink: 0
+                            fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.85rem)' : cardSize === 'medium' ? '12px' : '13px',
+                            color: '#FFB020',
+                            textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                            whiteSpace: 'nowrap',
+                            ...(cardSize === 'small' ? {
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '60%',
+                              flexShrink: 1
+                            } : {})
                           }}
                         >
-                          Out
+                          Rs. {parseFloat(item.price).toFixed(2)}
                         </Typography>
-                      ) : isCashier ? (
-                        <Button
-                          variant="contained"
-                          size="small"
-                          sx={{
-                            borderRadius: '999px',
-                            bgcolor: '#ffffff',
-                            color: '#f97316',
-                            fontWeight: 800,
-                            fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.75rem)' : cardSize === 'medium' ? '11px' : '12px',
-                            minWidth: cardSize === 'small' ? '50px' : 'auto',
-                            minHeight: cardSize === 'small' ? '28px' : '30px',
-                            px: cardSize === 'small' ? '0.6rem' : 1.8,
-                            py: cardSize === 'small' ? '0.2rem' : 0,
-                            flexShrink: 0,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                            transition: 'all 0.2s ease',
-                            '&:hover': {
-                              bgcolor: '#f97316',
-                              color: '#ffffff'
-                            }
-                          }}
-                        >
-                          Add
-                        </Button>
-                      ) : (
-                        <Chip
-                          label="Available"
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          sx={{ fontWeight: 800, fontSize: '10px', height: 22, bgcolor: 'rgba(22, 163, 74, 0.1)', borderColor: '#16a34a', color: '#16a34a' }}
-                        />
-                      )}
+
+                        {!item.is_available ? (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: '#ef4444',
+                              fontWeight: 800,
+                              fontSize: cardSize === 'small' ? '10px' : '11px',
+                              flexShrink: 0
+                            }}
+                          >
+                            Out
+                          </Typography>
+                        ) : isCashier ? (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            sx={{
+                              borderRadius: '999px',
+                              bgcolor: '#ffffff',
+                              color: '#f97316',
+                              fontWeight: 800,
+                              fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.75rem)' : cardSize === 'medium' ? '11px' : '12px',
+                              minWidth: cardSize === 'small' ? '50px' : 'auto',
+                              minHeight: cardSize === 'small' ? '28px' : '30px',
+                              px: cardSize === 'small' ? '0.6rem' : 1.8,
+                              py: cardSize === 'small' ? '0.2rem' : 0,
+                              flexShrink: 0,
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                bgcolor: '#f97316',
+                                color: '#ffffff'
+                              }
+                            }}
+                          >
+                            Add
+                          </Button>
+                        ) : (
+                          <Chip
+                            label="Available"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ fontWeight: 800, fontSize: '10px', height: 22, bgcolor: 'rgba(22, 163, 74, 0.1)', borderColor: '#16a34a', color: '#16a34a' }}
+                          />
+                        )}
+                      </Box>
                     </Box>
-                  </Box>
-                </Card>
+                  </Card>
+                )
               ))}
             </Box>
 
             {filteredItems.length === 0 && (
               <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>No dishes found matching selection.</Box>
+            )}
+                </Box>
+              </Box>
+            ) : (
+              /* HORIZONTAL CATEGORY CHIPS LAYOUT (Top Chips Row) */
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2, width: '100%', flex: 1, minHeight: 0 }}>
+                {/* Categories horizontal list with trailing fade effect */}
+                <Box sx={{ position: 'relative', width: '100%', flexShrink: 0 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 1,
+                      overflowX: 'auto',
+                      pb: 1,
+                      pr: 5,
+                      scrollSnapType: 'x mandatory',
+                      scrollBehavior: 'smooth',
+                      whiteSpace: 'nowrap',
+                      WebkitOverflowScrolling: 'touch',
+                      '&::-webkit-scrollbar': { display: 'none' }
+                    }}
+                  >
+                    <Chip
+                      label="🌟 All Items"
+                      onClick={() => setActiveCategory(null)}
+                      color={activeCategory === null ? 'primary' : 'default'}
+                      variant={activeCategory === null ? 'default' : 'outlined'}
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        scrollSnapAlign: 'start',
+                        flexShrink: 0,
+                        '& .MuiChip-label': { whiteSpace: 'nowrap', overflow: 'visible' }
+                      }}
+                    />
+                    {categories.map(cat => (
+                      <Chip
+                        key={cat.id}
+                        label={cat.name}
+                        onClick={() => setActiveCategory(cat.id)}
+                        color={activeCategory === cat.id ? 'primary' : 'default'}
+                        variant={activeCategory === cat.id ? 'default' : 'outlined'}
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          scrollSnapAlign: 'start',
+                          flexShrink: 0,
+                          '& .MuiChip-label': { whiteSpace: 'nowrap', overflow: 'visible' }
+                        }}
+                      />
+                    ))}
+                  </Box>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      width: '40px',
+                      height: '100%',
+                      background: theme => `linear-gradient(to right, transparent, ${theme.palette.background.default})`,
+                      pointerEvents: 'none',
+                      zIndex: 2
+                    }}
+                  />
+                </Box>
+
+                {/* Food Menu Items Grid */}
+                <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: cardSize === 'icon'
+                        ? { xs: 'repeat(4, 1fr)', sm: 'repeat(6, 1fr)', md: 'repeat(8, 1fr)', xl: 'repeat(10, 1fr)' }
+                        : `repeat(auto-fill, minmax(${cardSize === 'small' ? '120px' : cardSize === 'medium' ? '145px' : '175px'}, 1fr))`,
+                      gap: cardSize === 'icon' ? '0.45rem' : cardSize === 'small' ? '0.65rem' : cardSize === 'medium' ? '0.85rem' : '1rem',
+                      width: '100%'
+                    }}
+                  >
+                    {filteredItems.map(item => (
+                      cardSize === 'icon' ? (
+                        /* ICON MODE TILE */
+                        <Card
+                          key={item.id}
+                          onClick={() => isCashier && handleItemClick(item)}
+                          sx={{
+                            cursor: isCashier ? 'pointer' : 'default',
+                            position: 'relative',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            aspectRatio: '1/1',
+                            boxShadow: '0 3px 10px rgba(0,0,0,0.12)',
+                            opacity: item.is_available ? 1 : 0.6,
+                            transition: 'all 0.2s ease',
+                            '&:hover': {
+                              transform: 'translateY(-2px)',
+                              boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+                              '& .card-bg-image': { transform: 'scale(1.08)' }
+                            },
+                            '&:active': { transform: 'scale(0.95)' }
+                          }}
+                        >
+                          {item.image_url ? (
+                            <CardMedia component="img" image={item.image_url} alt={item.name} className="card-bg-image" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s ease' }} />
+                          ) : (
+                            <Box className="card-bg-image" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(20px, 4vw, 32px)', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', transition: 'transform 0.4s ease' }}>
+                              {item.name.includes('Burger') && '🍔'}
+                              {item.name.includes('Fries') && '🍟'}
+                              {item.name.includes('Pizza') && '🍕'}
+                              {item.name.includes('Cone') && '🍦'}
+                              {item.name.includes('McFlurry') && '🍨'}
+                              {item.name.includes('Coke') && '🥤'}
+                              {item.name.includes('Fanta') && '🥤'}
+                              {item.name.includes('Coffee') && '☕'}
+                              {item.name.includes('Latte') && '☕'}
+                              {item.name.includes('Cappuccino') && '☕'}
+                              {item.name.includes('Macchiato') && '☕'}
+                              {item.name.includes('Croissant') && '🥐'}
+                              {item.name.includes('Muffin') && '🧁'}
+                              {item.name.includes('Frappuccino') && '🍹'}
+                              {!['Burger', 'Fries', 'Pizza', 'Cone', 'McFlurry', 'Coke', 'Fanta', 'Coffee', 'Latte', 'Cappuccino', 'Macchiato', 'Croissant', 'Muffin', 'Frappuccino'].some(x => item.name.includes(x)) && '🍽️'}
+                            </Box>
+                          )}
+                          <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0.1) 80%, transparent 100%)', pointerEvents: 'none', zIndex: 2 }} />
+                          <Box sx={{ position: 'absolute', top: 6, left: 6, zIndex: 10, width: 9, height: 9, borderRadius: '50%', bgcolor: item.is_veg === 1 ? '#22C55E' : '#EF4444', border: '1.5px solid #ffffff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }} />
+                          {item.is_available ? (
+                            <Box sx={{ position: 'absolute', top: 6, right: 6, zIndex: 10, width: 18, height: 18, borderRadius: '50%', bgcolor: '#ffffff', color: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>+</Box>
+                          ) : (
+                            <Box sx={{ position: 'absolute', top: 6, right: 6, zIndex: 10, px: 0.6, py: 0.1, borderRadius: '999px', bgcolor: 'rgba(239, 68, 68, 0.9)', color: '#ffffff', fontSize: '8px', fontWeight: 800 }}>OUT</Box>
+                          )}
+                          <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: '0.35rem 0.35rem 0.4rem', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem', textAlign: 'center' }}>
+                            <Typography variant="caption" sx={{ fontWeight: 900, fontSize: 'clamp(0.65rem, 1.8vw, 0.75rem)', color: '#FFB020', bgcolor: 'rgba(0, 0, 0, 0.6)', px: 0.7, py: 0.1, borderRadius: '999px', lineHeight: 1.1, whiteSpace: 'nowrap', border: '1px solid rgba(255,255,255,0.15)' }}>₹{Math.round(parseFloat(item.price))}</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 'clamp(0.65rem, 1.8vw, 0.75rem)', color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.9)', display: '-webkit-box', overflow: 'hidden', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, lineHeight: 1.15, width: '100%' }}>{item.name}</Typography>
+                          </Box>
+                        </Card>
+                      ) : (
+                        /* STANDARD CARD */
+                        <Card key={item.id} onClick={() => isCashier && handleItemClick(item)} sx={{ cursor: isCashier ? 'pointer' : 'default', position: 'relative', borderRadius: cardSize === 'small' ? '12px' : '16px', overflow: 'hidden', aspectRatio: cardSize === 'small' ? '1/1' : cardSize === 'medium' ? '1/1' : '4/5', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', opacity: item.is_available ? 1 : 0.65, transition: 'all 0.25s ease', '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 10px 24px rgba(0,0,0,0.18)', '& .card-bg-image': { transform: 'scale(1.08)' } }, '&:active': { transform: 'scale(0.97)' } }}>
+                          {item.image_url ? (
+                            <CardMedia component="img" image={item.image_url} alt={item.name} className="card-bg-image" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s ease' }} />
+                          ) : (
+                            <Box className="card-bg-image" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: cardSize === 'small' ? '28px' : cardSize === 'medium' ? '36px' : '44px', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', transition: 'transform 0.4s ease' }}>
+                              {item.name.includes('Burger') && '🍔'}
+                              {item.name.includes('Fries') && '🍟'}
+                              {item.name.includes('Pizza') && '🍕'}
+                              {item.name.includes('Cone') && '🍦'}
+                              {item.name.includes('McFlurry') && '🍨'}
+                              {item.name.includes('Coke') && '🥤'}
+                              {item.name.includes('Fanta') && '🥤'}
+                              {item.name.includes('Coffee') && '☕'}
+                              {item.name.includes('Latte') && '☕'}
+                              {item.name.includes('Cappuccino') && '☕'}
+                              {item.name.includes('Macchiato') && '☕'}
+                              {item.name.includes('Croissant') && '🥐'}
+                              {item.name.includes('Muffin') && '🧁'}
+                              {item.name.includes('Frappuccino') && '🍹'}
+                              {!['Burger', 'Fries', 'Pizza', 'Cone', 'McFlurry', 'Coke', 'Fanta', 'Coffee', 'Latte', 'Cappuccino', 'Macchiato', 'Croissant', 'Muffin', 'Frappuccino'].some(x => item.name.includes(x)) && '🍽️'}
+                            </Box>
+                          )}
+                          <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.05) 75%, transparent 100%)', pointerEvents: 'none', zIndex: 2 }} />
+                          <Chip label={item.is_veg === 1 ? 'Veg' : 'Non-Veg'} size="small" sx={{ position: 'absolute', top: 8, left: 8, zIndex: 10, fontWeight: 800, height: cardSize === 'small' ? 16 : 18, fontSize: cardSize === 'small' ? '9px' : '10px', bgcolor: item.is_veg === 1 ? '#16a34a' : '#dc2626', color: '#ffffff', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', borderRadius: '999px', px: 0.2 }} />
+                          <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: cardSize === 'small' ? '0.5rem 0.6rem' : cardSize === 'medium' ? 1.2 : 1.5, zIndex: 10, display: 'flex', flexDirection: 'column', gap: cardSize === 'small' ? '0.15rem' : '0.2rem' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: cardSize === 'small' ? 'clamp(0.75rem, 2.5vw, 0.9rem)' : cardSize === 'medium' ? '12px' : '13px', color: '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', ...(cardSize === 'small' ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' } : { display: '-webkit-box', overflow: 'hidden', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }) }}>{item.name}</Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: cardSize === 'small' ? '0.4rem' : '0.2rem', width: '100%', mt: 0.2 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.85rem)' : cardSize === 'medium' ? '12px' : '13px', color: '#FFB020', textShadow: '0 1px 3px rgba(0,0,0,0.8)', whiteSpace: 'nowrap', ...(cardSize === 'small' ? { overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%', flexShrink: 1 } : {}) }}>Rs. {parseFloat(item.price).toFixed(2)}</Typography>
+                              {!item.is_available ? (
+                                <Typography variant="caption" sx={{ color: '#ef4444', fontWeight: 800, fontSize: cardSize === 'small' ? '10px' : '11px', flexShrink: 0 }}>Out</Typography>
+                              ) : isCashier ? (
+                                <Button variant="contained" size="small" sx={{ borderRadius: '999px', bgcolor: '#ffffff', color: '#f97316', fontWeight: 800, fontSize: cardSize === 'small' ? 'clamp(0.7rem, 2.5vw, 0.75rem)' : cardSize === 'medium' ? '11px' : '12px', minWidth: cardSize === 'small' ? '50px' : 'auto', minHeight: cardSize === 'small' ? '28px' : '30px', px: cardSize === 'small' ? '0.6rem' : 1.8, py: cardSize === 'small' ? '0.2rem' : 0, flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.25)', transition: 'all 0.2s ease', '&:hover': { bgcolor: '#f97316', color: '#ffffff' } }}>Add</Button>
+                              ) : (
+                                <Chip label="Available" size="small" color="success" variant="outlined" sx={{ fontWeight: 800, fontSize: '10px', height: 22, bgcolor: 'rgba(22, 163, 74, 0.1)', borderColor: '#16a34a', color: '#16a34a' }} />
+                              )}
+                            </Box>
+                          </Box>
+                        </Card>
+                      )
+                    ))}
+                  </Box>
+                  {filteredItems.length === 0 && (
+                    <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>No dishes found matching selection.</Box>
+                  )}
+                </Box>
+              </Box>
             )}
           </Box>
         )}
