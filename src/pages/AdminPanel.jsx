@@ -110,6 +110,8 @@ export default function AdminPanel({ token }) {
   const [printerDefaultReceipt, setPrinterDefaultReceipt] = useState(false);
   const [printerDefaultKot, setPrinterDefaultKot] = useState(false);
   const [printerStatus, setPrinterStatus] = useState('online');
+  const [printerDeviceId, setPrinterDeviceId] = useState('');
+  const [gatewayDevices, setGatewayDevices] = useState([]);
   
   const [categoryName, setCategoryName] = useState('');
   const [categoryDesc, setCategoryDesc] = useState('');
@@ -583,6 +585,14 @@ export default function AdminPanel({ token }) {
           setPrinters(Array.isArray(printData) ? printData : []);
         } else {
           setPrinters([]);
+        }
+
+        const devRes = await apiFetch('/api/agent/devices');
+        if (devRes.ok) {
+          const devData = await devRes.json();
+          setGatewayDevices(Array.isArray(devData) ? devData : []);
+        } else {
+          setGatewayDevices([]);
         }
       } else if (activeTab === 3) {
         let url = '/api/reports/admin';
@@ -1229,6 +1239,7 @@ export default function AdminPanel({ token }) {
     setPrinterDefaultReceipt(false);
     setPrinterDefaultKot(false);
     setPrinterStatus('online');
+    setPrinterDeviceId('');
     setDialogOpen(true);
   };
 
@@ -1246,6 +1257,7 @@ export default function AdminPanel({ token }) {
     setPrinterDefaultReceipt(Boolean(printer.is_default_receipt));
     setPrinterDefaultKot(Boolean(printer.is_default_kot));
     setPrinterStatus(printer.status || 'online');
+    setPrinterDeviceId(printer.device_id ? printer.device_id.toString() : '');
     setDialogOpen(true);
   };
 
@@ -1282,7 +1294,8 @@ export default function AdminPanel({ token }) {
       cash_drawer: parseInt(printerCashDrawer),
       is_default_receipt: printerDefaultReceipt,
       is_default_kot: printerDefaultKot,
-      status: printerStatus
+      status: printerStatus,
+      device_id: printerDeviceId ? parseInt(printerDeviceId) : null
     };
 
     try {
@@ -4410,6 +4423,22 @@ export default function AdminPanel({ token }) {
                   <MenuItem value="bar">Bar Printer</MenuItem>
                   <MenuItem value="dessert">Dessert Printer</MenuItem>
                 </Select>
+
+                <FormControl fullWidth size="small">
+                  <InputLabel>Assigned Print Gateway PC</InputLabel>
+                  <Select
+                    value={printerDeviceId}
+                    label="Assigned Print Gateway PC"
+                    onChange={e => setPrinterDeviceId(e.target.value)}
+                  >
+                    <MenuItem value="">Default / Auto-Assign Gateway</MenuItem>
+                    {gatewayDevices.map(d => (
+                      <MenuItem key={d.id} value={d.id.toString()}>
+                        🖥️ {d.device_name} ({d.status === 'online' ? '🟢 Online' : '⚠️ Offline'})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
                 <FormControl fullWidth size="small">
                   <InputLabel>Online / Offline Status</InputLabel>
