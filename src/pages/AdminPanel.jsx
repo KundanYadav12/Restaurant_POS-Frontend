@@ -111,6 +111,7 @@ export default function AdminPanel({ token }) {
   const [printerDefaultKot, setPrinterDefaultKot] = useState(false);
   const [printerStatus, setPrinterStatus] = useState('online');
   const [printerDeviceId, setPrinterDeviceId] = useState('');
+  const [printerBluetoothAddress, setPrinterBluetoothAddress] = useState('');
   const [gatewayDevices, setGatewayDevices] = useState([]);
   
   const [categoryName, setCategoryName] = useState('');
@@ -1240,6 +1241,7 @@ export default function AdminPanel({ token }) {
     setPrinterDefaultKot(false);
     setPrinterStatus('online');
     setPrinterDeviceId('');
+    setPrinterBluetoothAddress('');
     setDialogOpen(true);
   };
 
@@ -1249,6 +1251,7 @@ export default function AdminPanel({ token }) {
     setPrinterName(printer.name || '');
     setPrinterType(printer.type || 'lan');
     setPrinterIp(printer.ip_address || '');
+    setPrinterBluetoothAddress(printer.bluetooth_address || '');
     setPrinterPort((printer.port || 9100).toString());
     setPrinterWidth((printer.paper_width || 80).toString());
     setPrinterRole(printer.role || 'receipt');
@@ -1286,8 +1289,9 @@ export default function AdminPanel({ token }) {
     const payload = {
       name: printerName,
       type: printerType,
-      ip_address: printerIp,
-      port: parseInt(printerPort || 9100),
+      ip_address: printerType === 'bluetooth' ? null : printerIp,
+      bluetooth_address: printerType === 'bluetooth' ? printerBluetoothAddress : null,
+      port: printerType === 'bluetooth' ? null : parseInt(printerPort || 9100),
       paper_width: printerWidth,
       role: printerRole,
       auto_cut: parseInt(printerAutoCut),
@@ -1295,7 +1299,7 @@ export default function AdminPanel({ token }) {
       is_default_receipt: printerDefaultReceipt,
       is_default_kot: printerDefaultKot,
       status: printerStatus,
-      device_id: printerDeviceId ? parseInt(printerDeviceId) : null
+      device_id: printerType === 'bluetooth' ? null : (printerDeviceId ? parseInt(printerDeviceId) : null)
     };
 
     try {
@@ -4396,16 +4400,31 @@ export default function AdminPanel({ token }) {
 
             {dialogType.includes('printer') && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField label="Printer Name / Location" size="small" fullWidth value={printerName} onChange={e => setPrinterName(e.target.value)} required placeholder="e.g. Kitchen Printer 1" />
-                <TextField label="IP Address / Host" size="small" fullWidth value={printerIp} onChange={e => setPrinterIp(e.target.value)} required placeholder="192.168.1.100" />
-                <TextField label="Port" size="small" fullWidth value={printerPort} onChange={e => setPrinterPort(e.target.value)} required placeholder="9100" />
+                <TextField label="Printer Name / Location" size="small" fullWidth value={printerName} onChange={e => setPrinterName(e.target.value)} required placeholder="e.g. Mobile Kitchen Bluetooth Printer" />
                 
+                {printerType === 'bluetooth' ? (
+                  <TextField 
+                    label="Bluetooth MAC Address / Identifier" 
+                    size="small" 
+                    fullWidth 
+                    value={printerBluetoothAddress} 
+                    onChange={e => setPrinterBluetoothAddress(e.target.value)} 
+                    placeholder="e.g. 00:11:22:33:44:55 (Optional)" 
+                    helperText="📱 Direct Bluetooth thermal printing is paired directly inside the Mobile POS app."
+                  />
+                ) : (
+                  <>
+                    <TextField label="IP Address / Host" size="small" fullWidth value={printerIp} onChange={e => setPrinterIp(e.target.value)} required placeholder="192.168.1.100" />
+                    <TextField label="Port" size="small" fullWidth value={printerPort} onChange={e => setPrinterPort(e.target.value)} required placeholder="9100" />
+                  </>
+                )}
+
                 <Grid container spacing={2}>
                   <Grid size={6}>
                     <Select size="small" fullWidth value={printerType} onChange={e => setPrinterType(e.target.value)}>
                       <MenuItem value="lan">LAN / Network (TCP)</MenuItem>
                       <MenuItem value="usb">USB</MenuItem>
-                      <MenuItem value="bluetooth">Bluetooth</MenuItem>
+                      <MenuItem value="bluetooth">Bluetooth (Mobile Direct)</MenuItem>
                       <MenuItem value="network">Network Socket</MenuItem>
                     </Select>
                   </Grid>
