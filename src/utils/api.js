@@ -3,7 +3,10 @@
  * Uses import.meta.env.VITE_API_URL for production and development environment compatibility.
  */
 
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const defaultBaseUrl = isLocalhost ? 'http://localhost:5004/api' : '/api';
+
+export const API_BASE_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== '/api' ? import.meta.env.VITE_API_URL : defaultBaseUrl).replace(/\/+$/, '');
 
 export function getApiUrl(endpoint) {
   if (!endpoint) return API_BASE_URL;
@@ -42,11 +45,11 @@ const processQueue = (error, token = null) => {
 /**
  * Clear local credentials and notify app of session termination
  */
-export function handleSessionExpired() {
+export function handleSessionExpired(reason = null) {
   localStorage.removeItem('pos_token');
   localStorage.removeItem('pos_refresh_token');
   localStorage.removeItem('pos_user');
-  window.dispatchEvent(new CustomEvent('auth_session_expired'));
+  window.dispatchEvent(new CustomEvent('auth_session_expired', { detail: { reason } }));
 }
 
 export async function apiFetch(url, options = {}) {
@@ -85,6 +88,18 @@ export async function apiFetch(url, options = {}) {
 
   // Handle 401 Unauthorized (Expired or Invalid Access Token)
   if (response.status === 401 && !isAuthEndpoint) {
+    // Check if session was invalidated due to single device login elsewhere
+    try {
+      const clonedRes = response.clone();
+      const errorData = await clonedRes.json();
+      if (errorData && errorData.code === 'LOGGED_IN_ELSEWHERE') {
+        handleSessionExpired('LOGGED_IN_ELSEWHERE');
+        return response;
+      }
+    } catch (e) {
+      // Ignore clone/JSON parsing errors
+    }
+
     const refreshToken = localStorage.getItem('pos_refresh_token');
 
     // If no refresh token is present, clear session and return 401 response
@@ -150,9 +165,16 @@ export async function apiFetch(url, options = {}) {
         response = await fetch(fullUrl, fetchOptions);
       } else {
         // Refresh token expired or invalid
+        let reason = null;
+        try {
+          const rData = await refreshRes.json();
+          if (rData && rData.code === 'LOGGED_IN_ELSEWHERE') {
+            reason = 'LOGGED_IN_ELSEWHERE';
+          }
+        } catch (e) {}
         processQueue(new Error('Refresh token expired'), null);
         isRefreshing = false;
-        handleSessionExpired();
+        handleSessionExpired(reason);
       }
     } catch (refreshErr) {
       processQueue(refreshErr, null);

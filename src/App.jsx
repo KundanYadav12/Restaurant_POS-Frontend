@@ -64,7 +64,11 @@ export default function App() {
 
     validateAndSyncSession();
 
-    const handleSessionExpired = () => {
+    const handleSessionExpired = (e) => {
+      const reason = e?.detail?.reason;
+      if (reason === 'LOGGED_IN_ELSEWHERE') {
+        alert('You have been logged out because your account was logged in from another device.');
+      }
       setToken('');
       setUser(null);
     };
@@ -211,77 +215,104 @@ export default function App() {
           {/* Header Bar */}
           {!posFocusMode && (
             <AppBar position="static" color="default" elevation={1} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, xl: 80 }, px: { xs: 1.5, xl: 4 } }}>
+              <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 46, sm: 56, xl: 80 }, py: { xs: 0.5, sm: 1 }, px: { xs: 1, sm: 2, xl: 4 }, gap: 1 }}>
                 
                 {/* Brand Title */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, xl: 2 } }}>
-                  <StorefrontIcon color="primary" sx={{ fontSize: { xs: 28, xl: 40 } }} />
-                  <Typography variant="h6" sx={{ fontWeight: 800, fontSize: { xs: '1.1rem', xl: '1.6rem' }, color: 'primary.main' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5, xl: 2 }, flexShrink: 0 }}>
+                  <StorefrontIcon color="primary" sx={{ fontSize: { xs: 22, sm: 28, xl: 40 } }} />
+                  <Typography variant="h6" sx={{ fontWeight: 800, fontSize: { xs: '0.95rem', sm: '1.1rem', xl: '1.6rem' }, color: 'primary.main', whiteSpace: 'nowrap' }}>
                     {user?.restaurant_name || 'Restaurant POS'}
                   </Typography>
                 </Box>
 
-                {/* Navigation Menu */}
-                {isMobile ? (
-                  <>
-                    <IconButton onClick={(e) => setAnchorElNav(e.currentTarget)} color="inherit">
-                      <MenuIcon />
-                    </IconButton>
-                    <Menu
-                      anchorEl={anchorElNav}
-                      open={Boolean(anchorElNav)}
-                      onClose={() => setAnchorElNav(null)}
-                    >
-                      <MenuItem onClick={() => { setCurrentView('pos'); setAnchorElNav(null); }}>POS Screen</MenuItem>
-                      <MenuItem onClick={() => { setCurrentView('cashier'); setAnchorElNav(null); }}>Cashier Shift</MenuItem>
-                      {isAdminOrManager && (
-                        <MenuItem onClick={() => { setCurrentView('admin'); setAnchorElNav(null); }}>Admin Panel</MenuItem>
-                      )}
-                      {isSuperAdmin && (
-                        <MenuItem onClick={() => { setCurrentView('superadmin'); setAnchorElNav(null); }}>Super Admin</MenuItem>
-                      )}
-                    </Menu>
-                  </>
-                ) : (
-                  <Box sx={{ display: 'flex', gap: { xs: 1, xl: 2.5 } }}>
+                {/* Navigation Menu (Scrollable Tab Row on narrow screens) */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: { xs: 0.5, sm: 1, xl: 2.5 }, 
+                  overflowX: 'auto', 
+                  whiteSpace: 'nowrap', 
+                  py: 0.25,
+                  px: 0.5,
+                  maxWidth: '100%',
+                  WebkitOverflowScrolling: 'touch',
+                  '&::-webkit-scrollbar': { display: 'none' },
+                  msOverflowStyle: 'none',
+                  scrollbarWidth: 'none'
+                }}>
+                  <Button
+                    variant={currentView === 'pos' ? 'contained' : 'text'}
+                    onClick={() => setCurrentView('pos')}
+                    size="small"
+                    sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
+                      px: { xs: 1, sm: 2 },
+                      py: 0.4,
+                      minWidth: 'max-content',
+                      whiteSpace: 'nowrap',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    POS Screen
+                  </Button>
+                  <Button
+                    variant={currentView === 'cashier' ? 'contained' : 'text'}
+                    onClick={() => setCurrentView('cashier')}
+                    size="small"
+                    sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
+                      px: { xs: 1, sm: 2 },
+                      py: 0.4,
+                      minWidth: 'max-content',
+                      whiteSpace: 'nowrap',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    Cashier Shift
+                  </Button>
+                  {isAdminOrManager && (
                     <Button
-                      variant={currentView === 'pos' ? 'contained' : 'text'}
-                      onClick={() => setCurrentView('pos')}
-                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      variant={currentView === 'admin' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('admin')}
+                      size="small"
+                      sx={{ 
+                        fontWeight: 'bold', 
+                        fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
+                        px: { xs: 1, sm: 2 },
+                        py: 0.4,
+                        minWidth: 'max-content',
+                        whiteSpace: 'nowrap',
+                        borderRadius: '8px'
+                      }}
                     >
-                      POS Screen
+                      Admin Panel
                     </Button>
+                  )}
+                  {isSuperAdmin && (
                     <Button
-                      variant={currentView === 'cashier' ? 'contained' : 'text'}
-                      onClick={() => setCurrentView('cashier')}
-                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      variant={currentView === 'superadmin' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('superadmin')}
+                      color="secondary"
+                      size="small"
+                      sx={{ 
+                        fontWeight: 'bold', 
+                        fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
+                        px: { xs: 1, sm: 2 },
+                        py: 0.4,
+                        minWidth: 'max-content',
+                        whiteSpace: 'nowrap',
+                        borderRadius: '8px'
+                      }}
                     >
-                      Cashier Shift
+                      Super Admin
                     </Button>
-                    {isAdminOrManager && (
-                      <Button
-                        variant={currentView === 'admin' ? 'contained' : 'text'}
-                        onClick={() => setCurrentView('admin')}
-                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
-                      >
-                        Admin Panel
-                      </Button>
-                    )}
-                    {isSuperAdmin && (
-                      <Button
-                        variant={currentView === 'superadmin' ? 'contained' : 'text'}
-                        onClick={() => setCurrentView('superadmin')}
-                        color="secondary"
-                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
-                      >
-                        Super Admin
-                      </Button>
-                    )}
-                  </Box>
-                )}
+                  )}
+                </Box>
 
                 {/* User Profile & Actions */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, xl: 3 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5, xl: 3 }, flexShrink: 0 }}>
                   <Box sx={{ display: { xs: 'none', md: 'block' }, textAlign: 'right' }}>
                     <Typography variant="body2" sx={{ fontWeight: 700, fontSize: { xs: '0.875rem', xl: '1.2rem' } }}>{user?.name || 'User'}</Typography>
                     <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: { xs: '0.75rem', xl: '1rem' } }}>
@@ -289,12 +320,12 @@ export default function App() {
                     </Typography>
                   </Box>
 
-                  <IconButton onClick={toggleTheme} color="inherit">
-                    {themeMode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
+                  <IconButton onClick={toggleTheme} color="inherit" size="small">
+                    {themeMode === 'light' ? <Brightness4Icon fontSize="small" /> : <Brightness7Icon fontSize="small" />}
                   </IconButton>
 
-                  <IconButton onClick={handleLogout} color="error" title="End Session">
-                    <LogOutIcon />
+                  <IconButton onClick={handleLogout} color="error" title="End Session" size="small">
+                    <LogOutIcon fontSize="small" />
                   </IconButton>
                 </Box>
 
