@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab, useMediaQuery, IconButton, CircularProgress, Checkbox, TablePagination, InputAdornment, TableSortLabel, Tooltip, FormControl, InputLabel, Badge, Switch, FormControlLabel, Divider, Alert } from '@mui/material';
-import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown, Boxes, Package, AlertTriangle, TrendingUp, History, FileSpreadsheet, Save } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, Settings, FileText, Wifi, List, RefreshCw, Download, Layers, GripVertical, Search, X, Filter, ArrowUpDown, CheckSquare, Square, Utensils, CheckCircle, XCircle, Printer, Users, UserPlus, Key, ArrowUp, ArrowDown, Boxes, Package, AlertTriangle, TrendingUp, History, FileSpreadsheet, Save, Upload, Image as ImageIcon, Store } from 'lucide-react';
 import { apiFetch, getApiUrl, downloadFile } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 import DateRangePicker from '../components/DateRangePicker';
@@ -312,6 +312,35 @@ export default function AdminPanel({ token }) {
       notify.error('Network error saving GST settings.', 'Save Error');
     } finally {
       setSavingGstSettings(false);
+    }
+  };
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    setUploadingLogo(true);
+    try {
+      const res = await apiFetch('/api/settings/profile/logo', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to upload logo image.');
+
+      const formattedUrl = data.logo_url ? getApiUrl(data.logo_url) : data.logo_url;
+      setReceiptSettings(prev => ({ ...prev, logo_url: formattedUrl }));
+      notify.success('Restaurant logo uploaded successfully!', 'Logo Uploaded');
+    } catch (err) {
+      console.error('[Logo Upload Error]', err);
+      notify.error(err.message || 'Failed to upload logo image.', 'Upload Error');
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -1016,13 +1045,39 @@ export default function AdminPanel({ token }) {
           ...permissionsDraft
         }
       });
+
+      // Sync profile details to /api/settings/profile (updates restaurants table & audit history)
+      try {
+        await apiFetch('/api/settings/profile', {
+          method: 'PUT',
+          body: {
+            name: receiptSettings.restaurant_name,
+            logo_url: receiptSettings.logo_url,
+            address: receiptSettings.address,
+            phone: receiptSettings.phone,
+            email: receiptSettings.email,
+            gst_number: receiptSettings.gst_number
+          }
+        });
+      } catch (pe) {
+        console.warn('[Profile Sync Warning]', pe);
+      }
+
       if (res.ok) {
         const data = await res.json();
         const updated = data.settings || data;
         setReceiptSettings(updated);
         setWorkflowDraft(buildWorkflowDraft(updated));
         setPermissionsDraft(buildPermissionsDraft(updated));
-        notify.success('Receipt & KOT settings saved successfully.', 'Settings Saved');
+
+        // Update local session & header identity
+        const currentUser = JSON.parse(localStorage.getItem('pos_user') || '{}');
+        currentUser.restaurant_name = receiptSettings.restaurant_name;
+        currentUser.restaurant_logo_url = receiptSettings.logo_url;
+        localStorage.setItem('pos_user', JSON.stringify(currentUser));
+        window.dispatchEvent(new CustomEvent('auth_token_refreshed', { detail: { user: currentUser } }));
+
+        notify.success('🏪 Restaurant Profile & Receipt settings saved successfully.', 'Settings Saved');
       } else {
         const errData = await res.json();
         notify.error(errData.error || 'Failed to save settings.', 'Error');
@@ -1478,6 +1533,7 @@ export default function AdminPanel({ token }) {
             <Tab icon={<Boxes size={18} />} iconPosition="start" label="Stock Report" />
             <Tab icon={<FileSpreadsheet size={18} />} iconPosition="start" label="GST Slab Report (CA)" />
             <Tab icon={<Settings size={18} />} iconPosition="start" label="Receipt & KOT Settings" />
+            <Tab icon={<Store size={18} />} iconPosition="start" label="Restaurant Profile" />
             <Tab icon={<Users size={18} />} iconPosition="start" label="Staff & Cashiers" />
             <Tab icon={<History size={18} />} iconPosition="start" label="Order History" />
           </Tabs>
@@ -3039,15 +3095,55 @@ export default function AdminPanel({ token }) {
                         />
                       </Grid>
                       <Grid size={{ xs: 12 }}>
-                        <TextField
-                          label="Restaurant Logo Image URL"
-                          size="small"
-                          fullWidth
-                          placeholder="https://example.com/logo.png"
-                          value={receiptSettings.logo_url || ''}
-                          onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })}
-                          sx={{ width: '100%' }}
-                        />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, bgcolor: 'action.hover', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ImageIcon size={18} /> Restaurant Logo (Upload or Link)
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                            {receiptSettings.logo_url ? (
+                              <Box
+                                component="img"
+                                src={receiptSettings.logo_url}
+                                alt="Restaurant Logo"
+                                sx={{ width: 64, height: 64, borderRadius: 2, objectFit: 'cover', border: '1px solid', borderColor: 'divider', bgcolor: '#fff' }}
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 64, height: 64, borderRadius: 2, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed', borderColor: 'text.disabled' }}>
+                                <Typography variant="caption" color="text.secondary">No Logo</Typography>
+                              </Box>
+                            )}
+
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 220 }}>
+                              <Button
+                                variant="contained"
+                                component="label"
+                                size="small"
+                                disabled={uploadingLogo}
+                                startIcon={uploadingLogo ? <CircularProgress size={16} color="inherit" /> : <Upload size={16} />}
+                                sx={{ fontWeight: 800, width: 'fit-content', textTransform: 'none' }}
+                              >
+                                {uploadingLogo ? 'Uploading Logo...' : 'Upload Logo File (JPG, PNG, WEBP, SVG)'}
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/svg+xml,image/gif"
+                                  onChange={handleLogoFileUpload}
+                                />
+                              </Button>
+
+                              <TextField
+                                label="Logo Image URL (Or Paste Public Image Link)"
+                                size="small"
+                                fullWidth
+                                value={receiptSettings.logo_url || ''}
+                                onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })}
+                                placeholder="https://example.com/logo.png or /uploads/logos/logo_1.png"
+                                sx={{ width: '100%' }}
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
                       </Grid>
                     </Grid>
                   </Paper>
@@ -3771,8 +3867,232 @@ export default function AdminPanel({ token }) {
           </Box>
         )}
 
-        {/* --- STAFF & CASHIERS SUB-TAB --- */}
+        {/* --- RESTAURANT PROFILE SUB-TAB --- */}
         {activeTab === 8 && (
+          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Header Section */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                  🏪 Restaurant Profile & Branding Management
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Update your Restaurant Display Name, Logo Image, Address, Contact Info, and License Details.
+                </Typography>
+              </Box>
+
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<Save size={16} />}
+                onClick={handleSaveReceiptSettings}
+                disabled={savingReceiptSettings}
+                sx={{ fontWeight: 800, textTransform: 'none', px: 3, py: 1 }}
+              >
+                {savingReceiptSettings ? <CircularProgress size={18} color="inherit" /> : 'Save Restaurant Profile'}
+              </Button>
+            </Box>
+
+            <Grid container spacing={3}>
+              <Grid size={{ xs: 12, md: 7, lg: 8 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  
+                  {/* Card 1: Restaurant Identity & Logo */}
+                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ImageIcon size={20} /> Restaurant Identity & Logo
+                    </Typography>
+
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Restaurant Display Name"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.restaurant_name || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, restaurant_name: e.target.value })}
+                          required
+                          helperText="This name appears on the POS navbar, receipts, and customer bills."
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Branch / Outlet Name"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.branch_name || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, branch_name: e.target.value })}
+                          placeholder="e.g. Main Outlet / Express Branch"
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, bgcolor: 'action.hover', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            🖼️ Restaurant Logo Image
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, flexWrap: 'wrap' }}>
+                            {receiptSettings.logo_url ? (
+                              <Box
+                                component="img"
+                                src={receiptSettings.logo_url}
+                                alt="Restaurant Logo"
+                                sx={{ width: 80, height: 80, borderRadius: 2.5, objectFit: 'cover', border: '1px solid', borderColor: 'divider', bgcolor: '#fff', p: 0.5 }}
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 80, height: 80, borderRadius: 2.5, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed', borderColor: 'text.disabled' }}>
+                                <Typography variant="caption" color="text.secondary">No Logo</Typography>
+                              </Box>
+                            )}
+
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flex: 1, minWidth: 240 }}>
+                              <Button
+                                variant="contained"
+                                component="label"
+                                size="small"
+                                disabled={uploadingLogo}
+                                startIcon={uploadingLogo ? <CircularProgress size={16} color="inherit" /> : <Upload size={16} />}
+                                sx={{ fontWeight: 800, width: 'fit-content', textTransform: 'none' }}
+                              >
+                                {uploadingLogo ? 'Uploading Image...' : 'Upload Logo File (JPG, PNG, WEBP, SVG)'}
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/svg+xml,image/gif"
+                                  onChange={handleLogoFileUpload}
+                                />
+                              </Button>
+
+                              <TextField
+                                label="Logo Image URL (Or Direct Image Link)"
+                                size="small"
+                                fullWidth
+                                value={receiptSettings.logo_url || ''}
+                                onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })}
+                                placeholder="https://example.com/logo.png"
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {/* Card 2: Contact & Licensing */}
+                  <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
+                      📍 Contact & Licensing Details
+                    </Typography>
+
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12 }}>
+                        <TextField
+                          label="Full Address"
+                          size="small"
+                          fullWidth
+                          multiline
+                          rows={2}
+                          value={receiptSettings.address || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, address: e.target.value })}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Phone Number"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.phone || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, phone: e.target.value })}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="WhatsApp Number"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.whatsapp || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, whatsapp: e.target.value })}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Email Address"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.email || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, email: e.target.value })}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="GSTIN Number"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.gst_number || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, gst_number: e.target.value })}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="FSSAI License Number"
+                          size="small"
+                          fullWidth
+                          value={receiptSettings.fssai_number || ''}
+                          onChange={e => setReceiptSettings({ ...receiptSettings, fssai_number: e.target.value })}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Box>
+              </Grid>
+
+              {/* Side Column: Brand Identity Preview */}
+              <Grid size={{ xs: 12, md: 5, lg: 4 }}>
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, display: 'flex', flexDirection: 'column', gap: 2, bgcolor: 'action.hover' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                    👀 Live Brand Identity Preview
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    This is how your Restaurant Identity will appear across the POS Navbar Header, Mobile Application, and Digital Receipts.
+                  </Typography>
+
+                  <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                    {receiptSettings.logo_url ? (
+                      <Box
+                        component="img"
+                        src={receiptSettings.logo_url}
+                        alt="Logo Preview"
+                        sx={{ width: 36, height: 36, borderRadius: 1.5, objectFit: 'cover', border: '1px solid', borderColor: 'divider', flexShrink: 0 }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <Box sx={{ width: 36, height: 36, borderRadius: 1.5, bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, flexShrink: 0 }}>
+                        {(receiptSettings.restaurant_name || 'R').charAt(0).toUpperCase()}
+                      </Box>
+                    )}
+
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'primary.main', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {receiptSettings.restaurant_name || 'Restaurant POS'}
+                      </Typography>
+                      {receiptSettings.branch_name && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {receiptSettings.branch_name}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
+        {/* --- STAFF & CASHIERS SUB-TAB --- */}
+        {activeTab === 9 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
             {/* Header Section */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
@@ -3909,8 +4229,8 @@ export default function AdminPanel({ token }) {
           </Box>
         )}
 
-        {/* --- TAB 9: ORDER HISTORY --- */}
-        {activeTab === 9 && (
+        {/* --- TAB 10: ORDER HISTORY --- */}
+        {activeTab === 10 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.25, sm: 2.5 }, width: '100%' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 1, width: '100%' }}>
               <Box sx={{ minWidth: 0 }}>

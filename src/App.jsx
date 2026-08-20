@@ -218,98 +218,147 @@ export default function App() {
               <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 46, sm: 56, xl: 80 }, py: { xs: 0.5, sm: 1 }, px: { xs: 1, sm: 2, xl: 4 }, gap: 1 }}>
                 
                 {/* Brand Title */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5, xl: 2 }, flexShrink: 0 }}>
-                  <StorefrontIcon color="primary" sx={{ fontSize: { xs: 22, sm: 28, xl: 40 } }} />
-                  <Typography variant="h6" sx={{ fontWeight: 800, fontSize: { xs: '0.95rem', sm: '1.1rem', xl: '1.6rem' }, color: 'primary.main', whiteSpace: 'nowrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5, xl: 2 }, flexShrink: 1, minWidth: 0, maxWidth: { xs: 200, sm: 320, md: 500 } }}>
+                  {user?.restaurant_logo_url ? (
+                    <Box
+                      component="img"
+                      src={user.restaurant_logo_url}
+                      alt="Logo"
+                      sx={{
+                        width: { xs: 24, sm: 32, xl: 40 },
+                        height: { xs: 24, sm: 32, xl: 40 },
+                        borderRadius: 1.5,
+                        objectFit: 'cover',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        flexShrink: 0
+                      }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <StorefrontIcon color="primary" sx={{ fontSize: { xs: 22, sm: 28, xl: 40 }, flexShrink: 0 }} />
+                  )}
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: { xs: '0.95rem', sm: '1.1rem', xl: '1.6rem' },
+                      color: 'primary.main',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
                     {user?.restaurant_name || 'Restaurant POS'}
                   </Typography>
                 </Box>
 
-                {/* Navigation Menu (Scrollable Tab Row on narrow screens) */}
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  gap: { xs: 0.5, sm: 1, xl: 2.5 }, 
-                  overflowX: 'auto', 
-                  whiteSpace: 'nowrap', 
-                  py: 0.25,
-                  px: 0.5,
-                  maxWidth: '100%',
-                  WebkitOverflowScrolling: 'touch',
-                  '&::-webkit-scrollbar': { display: 'none' },
-                  msOverflowStyle: 'none',
-                  scrollbarWidth: 'none'
-                }}>
-                  <Button
-                    variant={currentView === 'pos' ? 'contained' : 'text'}
-                    onClick={() => setCurrentView('pos')}
-                    size="small"
-                    sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
-                      px: { xs: 1, sm: 2 },
-                      py: 0.4,
-                      minWidth: 'max-content',
-                      whiteSpace: 'nowrap',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    POS Screen
-                  </Button>
-                  <Button
-                    variant={currentView === 'cashier' ? 'contained' : 'text'}
-                    onClick={() => setCurrentView('cashier')}
-                    size="small"
-                    sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
-                      px: { xs: 1, sm: 2 },
-                      py: 0.4,
-                      minWidth: 'max-content',
-                      whiteSpace: 'nowrap',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    Cashier Shift
-                  </Button>
-                  {isAdminOrManager && (
-                    <Button
-                      variant={currentView === 'admin' ? 'contained' : 'text'}
-                      onClick={() => setCurrentView('admin')}
-                      size="small"
-                      sx={{ 
-                        fontWeight: 'bold', 
-                        fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
-                        px: { xs: 1, sm: 2 },
-                        py: 0.4,
-                        minWidth: 'max-content',
-                        whiteSpace: 'nowrap',
-                        borderRadius: '8px'
+                {/* Navigation Menu (Responsive: ☰ Hamburger on Mobile, Inline Tabs on Desktop) */}
+                {isMobile ? (
+                  <>
+                    <IconButton
+                      onClick={(e) => setAnchorElNav(e.currentTarget)}
+                      color="inherit"
+                      sx={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: '10px',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: 'background.paper'
                       }}
                     >
-                      Admin Panel
-                    </Button>
-                  )}
-                  {isSuperAdmin && (
-                    <Button
-                      variant={currentView === 'superadmin' ? 'contained' : 'text'}
-                      onClick={() => setCurrentView('superadmin')}
-                      color="secondary"
-                      size="small"
-                      sx={{ 
-                        fontWeight: 'bold', 
-                        fontSize: { xs: '0.75rem', sm: '0.875rem', xl: '1.2rem' },
-                        px: { xs: 1, sm: 2 },
-                        py: 0.4,
-                        minWidth: 'max-content',
-                        whiteSpace: 'nowrap',
-                        borderRadius: '8px'
+                      <MenuIcon />
+                    </IconButton>
+                    <Menu
+                      anchorEl={anchorElNav}
+                      open={Boolean(anchorElNav)}
+                      onClose={() => setAnchorElNav(null)}
+                      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                      PaperProps={{
+                        elevation: 4,
+                        sx: { minWidth: 200, borderRadius: 2, mt: 1 }
                       }}
                     >
-                      Super Admin
+                      <MenuItem
+                        onClick={() => { setCurrentView('pos'); setAnchorElNav(null); }}
+                        selected={currentView === 'pos'}
+                        sx={{ fontWeight: currentView === 'pos' ? 800 : 500 }}
+                      >
+                        🛒 &nbsp; POS Screen
+                      </MenuItem>
+                      <MenuItem
+                        onClick={() => { setCurrentView('cashier'); setAnchorElNav(null); }}
+                        selected={currentView === 'cashier'}
+                        sx={{ fontWeight: currentView === 'cashier' ? 800 : 500 }}
+                      >
+                        💼 &nbsp; Cashier Shift
+                      </MenuItem>
+                      {isAdminOrManager && (
+                        <MenuItem
+                          onClick={() => { setCurrentView('admin'); setAnchorElNav(null); }}
+                          selected={currentView === 'admin'}
+                          sx={{ fontWeight: currentView === 'admin' ? 800 : 500 }}
+                        >
+                          ⚙️ &nbsp; Admin Panel
+                        </MenuItem>
+                      )}
+                      {isSuperAdmin && (
+                        <MenuItem
+                          onClick={() => { setCurrentView('superadmin'); setAnchorElNav(null); }}
+                          selected={currentView === 'superadmin'}
+                          sx={{ fontWeight: currentView === 'superadmin' ? 800 : 500 }}
+                        >
+                          👑 &nbsp; Super Admin
+                        </MenuItem>
+                      )}
+                      <Box sx={{ my: 1, borderTop: 1, borderColor: 'divider' }} />
+                      <MenuItem
+                        onClick={() => { setAnchorElNav(null); handleLogout(); }}
+                        sx={{ color: 'error.main', fontWeight: 700 }}
+                      >
+                        🚪 &nbsp; Logout
+                      </MenuItem>
+                    </Menu>
+                  </>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: { xs: 1, xl: 2.5 } }}>
+                    <Button
+                      variant={currentView === 'pos' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('pos')}
+                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                    >
+                      POS Screen
                     </Button>
-                  )}
-                </Box>
+                    <Button
+                      variant={currentView === 'cashier' ? 'contained' : 'text'}
+                      onClick={() => setCurrentView('cashier')}
+                      sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                    >
+                      Cashier Shift
+                    </Button>
+                    {isAdminOrManager && (
+                      <Button
+                        variant={currentView === 'admin' ? 'contained' : 'text'}
+                        onClick={() => setCurrentView('admin')}
+                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      >
+                        Admin Panel
+                      </Button>
+                    )}
+                    {isSuperAdmin && (
+                      <Button
+                        variant={currentView === 'superadmin' ? 'contained' : 'text'}
+                        onClick={() => setCurrentView('superadmin')}
+                        color="secondary"
+                        sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', xl: '1.2rem' } }}
+                      >
+                        Super Admin
+                      </Button>
+                    )}
+                  </Box>
+                )}
 
                 {/* User Profile & Actions */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5, xl: 3 }, flexShrink: 0 }}>

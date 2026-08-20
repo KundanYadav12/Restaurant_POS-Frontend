@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Grid, Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, useMediaQuery, IconButton, CircularProgress, Chip, Tooltip, Tabs, Tab } from '@mui/material';
-import { Plus, ToggleLeft, ToggleRight, Database, RefreshCw, Users, ShieldAlert, BarChart, Server, Calendar, CheckCircle, Edit2, Trash2, Mail, Send, Key, Palette, Cpu } from 'lucide-react';
+import { Plus, ToggleLeft, ToggleRight, Database, RefreshCw, Users, ShieldAlert, BarChart, Server, Calendar, CheckCircle, Edit2, Trash2, Mail, Send, Key, Palette, Cpu, History, Image as ImageIcon } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import { useNotify } from '../context/NotificationContext';
 import SuperAdminThemeManager from '../components/SuperAdminThemeManager';
@@ -8,7 +8,7 @@ import SuperAdminAiConfigManager from '../components/SuperAdminAiConfigManager';
 
 export default function SuperAdminPanel({ token }) {
   const { notify, confirmDialog } = useNotify();
-  const [saTab, setSaTab] = useState(0); // 0 = Tenants, 1 = Theme Customization
+  const [saTab, setSaTab] = useState(0); // 0 = Tenants, 1 = Version & Audit History, 2 = Theme, 3 = AI Config
   const [stats, setStats] = useState(null);
   const [restaurants, setRestaurants] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -19,6 +19,7 @@ export default function SuperAdminPanel({ token }) {
   // Dialog fields for Provisioning
   const [dialogOpen, setDialogOpen] = useState(false);
   const [restName, setRestName] = useState('');
+  const [restLogoUrl, setRestLogoUrl] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerMobile, setOwnerMobile] = useState('');
@@ -77,6 +78,7 @@ export default function SuperAdminPanel({ token }) {
     e.preventDefault();
     const payload = {
       name: restName,
+      logo_url: restLogoUrl,
       owner_name: ownerName,
       owner_email: ownerEmail,
       owner_mobile: ownerMobile,
@@ -106,6 +108,7 @@ export default function SuperAdminPanel({ token }) {
     setEditTenant({
       id: tenant.id,
       name: tenant.name || '',
+      logo_url: tenant.logo_url || '',
       owner_name: tenant.owner_name || '',
       owner_email: tenant.owner_email || tenant.email || '',
       owner_mobile: tenant.owner_mobile || tenant.phone || '',
@@ -258,14 +261,137 @@ export default function SuperAdminPanel({ token }) {
             textColor="primary"
           >
             <Tab icon={<Server size={18} />} iconPosition="start" label="Tenants & Subscriptions" sx={{ fontWeight: 800, textTransform: 'none' }} />
+            <Tab icon={<History size={18} />} iconPosition="start" label="📜 Version & Profile History" sx={{ fontWeight: 800, textTransform: 'none' }} />
             <Tab icon={<Palette size={18} />} iconPosition="start" label="🎨 Global Theme Customization" sx={{ fontWeight: 800, textTransform: 'none' }} />
             <Tab icon={<Cpu size={18} />} iconPosition="start" label="🤖 Google AI Configuration" sx={{ fontWeight: 800, textTransform: 'none' }} />
           </Tabs>
         </Box>
 
         {saTab === 1 ? (
-          <SuperAdminThemeManager token={token} />
+          /* VERSION HISTORY & AUDIT TRAIL TAB */
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  📜 Restaurant Profile Version History & Audit Trail
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Complete historical record of Restaurant Name changes, Logo updates, and Tenant Creations across the platform.
+                </Typography>
+              </Box>
+
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshCw size={14} />}
+                onClick={fetchSaaSData}
+                sx={{ fontWeight: 800, textTransform: 'none' }}
+              >
+                Refresh Log History
+              </Button>
+            </Box>
+
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5 }}>
+              <Table>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Event / Action</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Restaurant / Tenant</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Name Changes</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Logo Changes</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Changed By</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Date & Time</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {logs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">No version history logs recorded yet.</Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    logs.map(log => {
+                      const isProfileUpdate = log.action === 'RESTAURANT_PROFILE_UPDATED' || log.action === 'TENANT_UPDATE';
+                      const isCreation = log.action === 'RESTAURANT_CREATED' || log.action === 'TENANT_CREATE';
+
+                      return (
+                        <TableRow key={log.id} hover>
+                          <TableCell>
+                            <Chip
+                              label={isProfileUpdate ? 'Profile Updated' : isCreation ? 'Restaurant Created' : log.action}
+                              color={isCreation ? 'success' : isProfileUpdate ? 'info' : 'default'}
+                              size="small"
+                              sx={{ fontWeight: 800 }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {(log.current_restaurant_logo || log.new_logo) && (
+                                <Box component="img" src={log.current_restaurant_logo || log.new_logo} alt="Logo" sx={{ width: 26, height: 26, borderRadius: 1, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                              )}
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                                {log.current_restaurant_name || log.restaurant_name || log.new_name || `Tenant #${log.restaurant_id || ''}`}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            {log.prev_name || log.new_name ? (
+                              <Box sx={{ fontSize: 13 }}>
+                                {log.prev_name && (
+                                  <Typography variant="caption" sx={{ color: 'text.secondary', textDecoration: 'line-through', mr: 1 }}>
+                                    {log.prev_name}
+                                  </Typography>
+                                )}
+                                {log.new_name && (
+                                  <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                                    ➔ {log.new_name}
+                                  </Typography>
+                                )}
+                              </Box>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">{log.description || 'N/A'}</Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {log.prev_logo && (
+                                <Box component="img" src={log.prev_logo} alt="Old Logo" sx={{ width: 24, height: 24, borderRadius: 1, opacity: 0.5, border: '1px solid #ccc' }} />
+                              )}
+                              {log.prev_logo && log.new_logo && <Typography variant="caption">➔</Typography>}
+                              {log.new_logo ? (
+                                <Box component="img" src={log.new_logo} alt="New Logo" sx={{ width: 28, height: 28, borderRadius: 1, border: '1px solid #3b82f6' }} />
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">{log.prev_logo ? 'Cleared' : 'No Logo'}</Typography>
+                              )}
+                            </Box>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: 13 }}>
+                            {log.user_name || log.username || log.fallback_user_name || 'System / Admin'}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={(log.user_role || log.fallback_user_role || 'admin').toUpperCase()}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: 10, fontWeight: 800 }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12, color: 'text.secondary' }}>
+                            {new Date(log.created_at).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         ) : saTab === 2 ? (
+          <SuperAdminThemeManager token={token} />
+        ) : saTab === 3 ? (
           <SuperAdminAiConfigManager token={token} />
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -348,6 +474,7 @@ export default function SuperAdminPanel({ token }) {
             startIcon={<Plus size={16} />}
             onClick={() => {
               setRestName('');
+              setRestLogoUrl('');
               setOwnerName('');
               setOwnerEmail('');
               setOwnerMobile('');
@@ -379,11 +506,20 @@ export default function SuperAdminPanel({ token }) {
             </TableHead>
             <TableBody>
               {restaurants.map(rest => (
-                <TableRow key={rest.id}>
+                <TableRow key={rest.id} hover>
                   <TableCell sx={{ fontWeight: 700 }}>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 800 }}>{rest.name}</Typography>
-                      {rest.domain && <Typography variant="caption" color="primary">{rest.domain}</Typography>}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      {rest.logo_url ? (
+                        <Box component="img" src={rest.logo_url} alt="Logo" sx={{ width: 32, height: 32, borderRadius: 1.5, objectFit: 'cover', border: '1px solid', borderColor: 'divider' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 800 }}>{rest.name.charAt(0).toUpperCase()}</Typography>
+                        </Box>
+                      )}
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{rest.name}</Typography>
+                        {rest.domain && <Typography variant="caption" color="primary">{rest.domain}</Typography>}
+                      </Box>
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -446,7 +582,7 @@ export default function SuperAdminPanel({ token }) {
           </Table>
         </TableContainer>
 
-        {/* System Audit logs */}
+        {/* System Audit logs summary */}
         <Card variant="outlined">
           <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
@@ -458,7 +594,7 @@ export default function SuperAdminPanel({ token }) {
                   <Box>
                     <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', mr: 1 }}>[{log.action}]</Typography>
                     <Typography variant="caption" sx={{ color: 'text.primary' }}>{log.description}</Typography>
-                    {log.restaurant_name && <Typography variant="caption" color="secondary" sx={{ ml: 1, fontWeight: 'bold' }}>({log.restaurant_name})</Typography>}
+                    {log.current_restaurant_name && <Typography variant="caption" color="secondary" sx={{ ml: 1, fontWeight: 'bold' }}>({log.current_restaurant_name})</Typography>}
                   </Box>
                   <Typography variant="caption" color="text.secondary">IP: {log.ip_address} | {new Date(log.created_at).toLocaleTimeString()}</Typography>
                 </Box>
@@ -476,19 +612,20 @@ export default function SuperAdminPanel({ token }) {
         <form onSubmit={handleCreateRestaurant}>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField label="Restaurant Name" size="small" fullWidth value={restName} onChange={e => setRestName(e.target.value)} required />
+            <TextField label="Logo Image URL (Optional)" size="small" fullWidth placeholder="https://example.com/logo.png" value={restLogoUrl} onChange={e => setRestLogoUrl(e.target.value)} />
             <TextField label="Owner Full Name" size="small" fullWidth value={ownerName} onChange={e => setOwnerName(e.target.value)} required />
             <TextField label="Owner Email (Receives OTP)" type="email" size="small" fullWidth value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} required />
             <TextField label="Owner Mobile" size="small" fullWidth value={ownerMobile} onChange={e => setOwnerMobile(e.target.value)} />
             
             <Grid container spacing={2}>
-              <Grid xs={6}>
+              <Grid item xs={6}>
                 <Select size="small" fullWidth value={planId} onChange={e => setPlanId(e.target.value)}>
                   <MenuItem value="1">Starter (5 Users)</MenuItem>
                   <MenuItem value="2">Business (15 Users)</MenuItem>
                   <MenuItem value="3">Enterprise (100 Users)</MenuItem>
                 </Select>
               </Grid>
-              <Grid xs={6}>
+              <Grid item xs={6}>
                 <Select size="small" fullWidth value={durationMonths} onChange={e => setDurationMonths(e.target.value)}>
                   <MenuItem value="3">3 Months</MenuItem>
                   <MenuItem value="6">6 Months</MenuItem>
@@ -519,6 +656,14 @@ export default function SuperAdminPanel({ token }) {
                 value={editTenant.name}
                 onChange={e => setEditTenant({ ...editTenant, name: e.target.value })}
                 required
+              />
+              <TextField
+                label="Logo Image URL"
+                size="small"
+                fullWidth
+                placeholder="https://example.com/logo.png"
+                value={editTenant.logo_url}
+                onChange={e => setEditTenant({ ...editTenant, logo_url: e.target.value })}
               />
               <TextField
                 label="Owner Full Name"
