@@ -219,25 +219,21 @@ export default function App() {
                 
                 {/* Brand Title */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5, xl: 2 }, flexShrink: 1, minWidth: 0, maxWidth: { xs: 200, sm: 320, md: 500 } }}>
-                  {user?.restaurant_logo_url ? (
-                    <Box
-                      component="img"
-                      src={user.restaurant_logo_url}
-                      alt="Logo"
-                      sx={{
-                        width: { xs: 24, sm: 32, xl: 40 },
-                        height: { xs: 24, sm: 32, xl: 40 },
-                        borderRadius: 1.5,
-                        objectFit: 'cover',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        flexShrink: 0
-                      }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <StorefrontIcon color="primary" sx={{ fontSize: { xs: 22, sm: 28, xl: 40 }, flexShrink: 0 }} />
-                  )}
+                  <Box
+                    component="img"
+                    src={user?.restaurant_logo_url || '/ariso-pos-logo.png'}
+                    alt="Ariso POS"
+                    sx={{
+                      width: { xs: 28, sm: 34, xl: 42 },
+                      height: { xs: 28, sm: 34, xl: 42 },
+                      borderRadius: 1.5,
+                      objectFit: 'contain',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      flexShrink: 0
+                    }}
+                    onError={(e) => { e.target.src = '/ariso-pos-logo.png'; }}
+                  />
                   <Typography
                     variant="h6"
                     sx={{
@@ -249,7 +245,7 @@ export default function App() {
                       textOverflow: 'ellipsis'
                     }}
                   >
-                    {user?.restaurant_name || 'Restaurant POS'}
+                    {user?.restaurant_name || 'Ariso POS'}
                   </Typography>
                 </Box>
 

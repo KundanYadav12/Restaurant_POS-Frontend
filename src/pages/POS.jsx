@@ -8,10 +8,9 @@ import { formatWhatsAppReceipt, openWhatsAppShare } from '../utils/whatsappHelpe
 export default function POSScreen({ user, token, onLogout, isFocusMode, onFocusModeChange }) {
   const { notify } = useNotify();
 
-  // Role-Based Access Control (RBAC): Active Ticket panel is ONLY available for Cashier role.
-  // Restricted for Admin, Manager, Super Admin, Owner accounts.
+  // Role-Based Access Control (RBAC): Active Ticket panel & ordering available for Cashier, Admin, Manager, Owner, and Super Admin accounts.
   const userRole = (user?.role || JSON.parse(localStorage.getItem('pos_user') || '{}')?.role || '').toLowerCase();
-  const isCashier = userRole === 'cashier';
+  const isCashier = ['cashier', 'admin', 'manager', 'owner', 'super_admin', 'superadmin'].includes(userRole);
 
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);

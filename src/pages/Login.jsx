@@ -96,21 +96,15 @@ export default function Login({ onLoginSuccess }) {
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '56px',
-            height: '56px',
-            borderRadius: '16px',
-            background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-            color: '#fff',
             marginBottom: '12px',
-            boxShadow: '0 4px 12px rgba(249,115,22,0.35)'
           }}>
-            <Utensils size={28} />
+            <img src="/ariso-pos-logo.png" alt="Ariso POS" style={{ width: '64px', height: '64px', borderRadius: '14px', objectFit: 'contain' }} />
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a', margin: '0 0 4px 0' }}>
-            Multi-Tenant POS SaaS
+            Ariso POS
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            Sign in to access your Restaurant Terminal
+            Sign in to access your Terminal
           </p>
         </div>
 
